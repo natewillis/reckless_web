@@ -1,5 +1,5 @@
 """
-Production settings for reckless_web project.
+Production settings for reckless project.
 """
 import environ
 from .base import *

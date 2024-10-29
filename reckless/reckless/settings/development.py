@@ -1,5 +1,5 @@
 """
-Development settings for reckless_web project.
+Development settings for reckless project.
 """
 import environ
 from .base import *

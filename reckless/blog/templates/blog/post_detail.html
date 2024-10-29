@@ -1,0 +1,79 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <article>
+        {% if post.featured_image %}
+        <img src="{{ post.featured_image.url }}" class="img-fluid mb-4" alt="{{ post.title }}">
+        {% endif %}
+        
+        <h1 class="mb-3">{{ post.title }}</h1>
+        
+        <div class="text-muted mb-4">
+            <p>By {{ post.author }} | Published {{ post.published|date:"F j, Y" }}</p>
+            {% if post.author == user %}
+            <a href="{% url 'blog:post_edit' post.slug %}" class="btn btn-secondary btn-sm">Edit Post</a>
+            {% endif %}
+        </div>
+
+        <div class="post-content markdown-body">
+            {{ post.formatted_content|safe }}
+        </div>
+    </article>
+
+    <section class="mt-5">
+        <h3>Comments</h3>
+        {% for comment in post.comments.all %}
+        {% if comment.active %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">{{ comment.name }} | {{ comment.created|date:"F j, Y" }}</h6>
+                <p class="card-text">{{ comment.body }}</p>
+            </div>
+        </div>
+        {% endif %}
+        {% empty %}
+        <p>No comments yet.</p>
+        {% endfor %}
+    </section>
+</div>
+
+{% block extra_css %}
+<style>
+    .markdown-body {
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+    .markdown-body h1,
+    .markdown-body h2,
+    .markdown-body h3,
+    .markdown-body h4,
+    .markdown-body h5,
+    .markdown-body h6 {
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+    }
+    .markdown-body pre {
+        background-color: #f8f9fa;
+        padding: 1em;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+    .markdown-body img {
+        max-width: 100%;
+        height: auto;
+    }
+    .markdown-body blockquote {
+        border-left: 4px solid #dee2e6;
+        padding-left: 1em;
+        margin-left: 0;
+        color: #6c757d;
+    }
+    .markdown-body code {
+        background-color: #f8f9fa;
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+    }
+</style>
+{% endblock %}
+{% endblock %}

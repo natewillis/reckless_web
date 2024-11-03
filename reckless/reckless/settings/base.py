@@ -124,3 +124,6 @@ MARKDOWNX_MARKDOWN_EXTENSIONS = [
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Allow same origin embed for folium maps
+X_FRAME_OPTIONS = 'SAMEORIGIN'

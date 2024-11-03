@@ -109,7 +109,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (Uploads)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = BASE_DIR.parent / 'media'
 
 # Markdownx settings
 MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024  # 5MB

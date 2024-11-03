@@ -1,9 +1,11 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from blog.models import Post
 
 def home(request):
-    return render(request, 'core/home.html')
+    latest_posts = Post.objects.filter(status='published').order_by('-published')[:3]
+    return render(request, 'core/home.html', {'latest_posts': latest_posts})
 
 def login_view(request):
     if request.method == 'POST':

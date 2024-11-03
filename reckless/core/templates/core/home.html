@@ -11,29 +11,34 @@
 </div>
 
 <div class="row mt-4">
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Data Analysis</h5>
-                <p class="card-text">Explore and analyze your data with powerful tools and visualizations.</p>
+    <div class="col-12">
+        <h2 class="mb-4">Latest Blog Posts</h2>
+        {% if latest_posts %}
+            <div class="row">
+                {% for post in latest_posts %}
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100">
+                            {% if post.featured_image %}
+                                <img src="{{ post.featured_image.url }}" class="card-img-top" alt="{{ post.title }}">
+                            {% endif %}
+                            <div class="card-body">
+                                <h5 class="card-title">{{ post.title }}</h5>
+                                <p class="card-text text-muted">
+                                    <small>{{ post.published|date:"F j, Y" }} by {{ post.author.get_full_name|default:post.author.username }}</small>
+                                </p>
+                                <p class="card-text">{{ post.content|truncatewords:30 }}</p>
+                                <a href="{{ post.get_absolute_url }}" class="btn btn-primary">Read More</a>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
             </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Reports</h5>
-                <p class="card-text">Generate comprehensive reports and insights from your data.</p>
+            <div class="text-center mt-4">
+                <a href="{% url 'blog:post_list' %}" class="btn btn-outline-primary">View All Posts</a>
             </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Tools</h5>
-                <p class="card-text">Access a suite of tools for data manipulation and analysis.</p>
-            </div>
-        </div>
+        {% else %}
+            <p>No blog posts available yet.</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

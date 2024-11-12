@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 # constants
 HISTORY_FOLDER = Path.cwd().parent / 'scraping_history'

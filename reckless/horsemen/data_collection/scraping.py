@@ -2,6 +2,7 @@
 from zenrows import ZenRowsClient
 
 # support
+import environ
 from pathlib import Path
 from datetime import datetime, timedelta
 import time
@@ -9,6 +10,12 @@ import random
 import os
 from horsemen.data_collection.proxies.proxies import create_proxy_list
 from horsemen.data_collection.utils import SCRAPING_FOLDER
+
+# setup path to env file to get zenrows api
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+print(f'base dir is {BASE_DIR}')
+env = environ.Env()
+environ.Env.read_env(BASE_DIR / '.env')
 
 
 def detect_problem(html_content):
@@ -38,7 +45,7 @@ def scrape_url_zenrows(url, filename):
 
     while not Path(full_filepath).exists():
 
-        client = ZenRowsClient(os.environ('ZENROWS_API_KEY'))
+        client = ZenRowsClient(env('ZENROWS_API_KEY'))
 
         try:
             response = client.get(url)

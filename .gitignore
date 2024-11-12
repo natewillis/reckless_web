@@ -25,6 +25,7 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 media/
+mediafiles/
 staticfiles/
 
 # Virtual Environment
@@ -43,3 +44,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+#horsemen
+test_data/
+scraping_history/
+files_to_scrape/

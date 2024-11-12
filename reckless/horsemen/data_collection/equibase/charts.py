@@ -49,6 +49,25 @@ def get_line_text(page, y_start, y_end):
     line_text = " ".join(words_in_line)
     return line_text  # Returns the concatenated line or empty string if none found
 
+def get_header_info(line):
+
+    header_chars = line['chars']
+    last_x0 = header_chars[0]['x0']
+    start_x0 = last_x0
+    label = ''
+    header_positions = {}
+    header_order = []
+    for char in header_chars:
+        if char['x0'] - last_x0 > 9:
+            header_positions[label] = start_x0
+            header_order.append(label)
+            start_x0 = char['x0']
+            label = ''
+        label += char['text']
+        last_x0 = char['x0']
+    
+    return header_order, header_positions
+
 def get_race_info(page):
 
     # init return dict
@@ -97,12 +116,77 @@ def get_race_info(page):
 
         # purse
         if 'Purse:$' in line_text:
-            race_info['purse'] = int(line_text.replace('Purse:$','').replace(',','').replace('Guaranteed',''))
+            pattern = r'\$\d{1,3}(?:,\d{3})*'
+            match = re.search(pattern, line_text)
+            if match:
+                race_info['purse'] = int(match.group(0).replace('$', '').replace(',', ''))
 
         # weather/ Track
         if 'Weather:' in line_text:
             race_info['weather']=line_text.replace('Weather:','').split('Track:')[0]
             race_info['condition']=line_text.split('Track:')[1]
+
+    # search for things without spaces
+    race_info_table = False
+    header_order = []
+    header_positions = {}
+    for line in lines:
+
+        # fractional times
+        if 'FractionalTimes:' in line['text']:
+            race_info_table = False # first line after race info table
+            pattern = r'\b\d+:\d+\.\d+|\b\d+\.\d+'
+            race_info['times'] = re.findall(pattern, line['text'])
+
+        # a new race info line
+        if race_info_table:
+            cur_pgm = ''
+            for label_count, label in enumerate(header_order):
+                font_height = 0
+                font_y0 = 0
+                normal_text = ''
+                super_text = ''
+                start_x = header_positions[label]
+                last_x1 = line['chars'][0]['x1']
+                if label_count + 1 >= len(header_order):
+                    end_x = 1000000
+                else:
+                    end_x = header_positions[header_order[label_count+1]]
+
+                for char in line['chars']:
+                    if font_height == 0:
+                        font_height = char['y1'] - char['y0']
+                        font_y0 = char['y0']
+                    if char['x0']<end_x-1:
+                        if char['x0']>=start_x-1:
+                            if char['y0']>font_y0+1:
+                                super_text += char['text']
+                            else:
+                                if char['x0']-last_x1 > 1:
+                                    normal_text += ' '
+                                normal_text += char['text']
+                    else:
+                        if label == 'Pgm':
+                            cur_pgm = normal_text.upper()
+                            race_info['entries'][cur_pgm]={}
+                        if label == 'HorseName(Jockey)':
+                            horse_jockey_text = normal_text.upper()
+                            pattern = r'^[^(]+'
+                            match = re.match(pattern, horse_jockey_text)
+                            if match:
+                                race_info['entries'][cur_pgm]['horse_name'] = match.group(0).strip()
+                        if label == 'PP':
+                            race_info['entries'][cur_pgm]['post_position']=int(normal_text)
+                    last_x1 = char['x1']
+
+
+        # header of race info table
+        if 'LastRaced' in line['text']:
+            race_info_table = True
+            header_order, header_positions = get_header_info(line)
+            race_info['entries'] = {}
+            print(header_order)
+            
 
     # return variable
     return race_info

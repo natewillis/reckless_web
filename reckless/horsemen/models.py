@@ -201,9 +201,13 @@ class Races(models.Model):
     wager_text = models.CharField(max_length=255, null=True)
     breed = models.CharField(max_length=2, null=True, choices=BREED_CHOICES)
     cancelled = models.BooleanField(default=False)
+    race_surface = models.CharField(max_length=1, choices=RACE_SURFACE, null=True)
 
     # EQB Entries
     eqb_entries_import = models.BooleanField(default=False)
+
+    # EQB chart
+    eqb_chart_import = models.BooleanField(default=False)
 
     def create_drf_entries_url(self):
 
@@ -302,3 +306,19 @@ class Entries(models.Model):
     equibase_horse_entries_scraped = models.BooleanField(default=False)
     equibase_speed_rating = models.IntegerField(null=True)
 
+class Workouts(models.Model):
+
+    RACE_SURFACE = [
+        ('D', 'Dirt'),
+        ('T', 'Turf')
+    ]
+
+    horse = models.ForeignKey(Horses, on_delete=models.CASCADE)
+    workout_date = models.DateField()
+    track = models.ForeignKey(Tracks, on_delete=models.CASCADE)
+    surface = models.CharField(max_length=1, choices=RACE_SURFACE, default='D')
+    distance = models.FloatField()
+    time_seconds = models.FloatField()
+    note = models.CharField(max_length=255)
+    workout_rank = models.IntegerField()
+    workout_total = models.IntegerField()

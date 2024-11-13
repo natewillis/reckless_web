@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 from datetime import datetime
 from horsemen.data_collection.scraping import scrape_url_zenrows
-from horsemen.data_collection.utils import SCRAPING_FOLDER
-from horsemen.models import Tracks, Races, Entries, Horses
+from horsemen.data_collection.utils import SCRAPING_FOLDER, convert_string_to_furlongs, convert_string_to_seconds
+from horsemen.models import Tracks, Races, Entries, Horses, Workouts
 from django.db.models import Q
 from django.utils import timezone
 from django.core.exceptions import ObjectDoesNotExist
@@ -121,6 +121,69 @@ def parse_equibase_horse_results_history(html_content):
                             'equibase_horse_entries_scraped': True
                         }
                     )
+
+    # Find the div with id="entries"
+    workout_div = soup.find('div', id='workouts')
+    if workout_div:
+        
+        # parse results rows
+        for workout_row in workout_div.find_all('tr'):
+            
+            # split on td
+            workout_cells = workout_row.find_all('td')
+
+            # ignore header
+            if len(workout_cells) == 0:
+                continue
+
+            # workout data
+            if workout_cells[0].find('a'):
+                track_url = workout_cells[0].find('a')['href']
+                pattern = r'trk=([A-Z]{2,3}).*?cy=([A-Z]{2,3})'
+                match = re.search(pattern, track_url)
+                if match:
+                    track_code = match.group(1)
+                    track_country = match.group(2)
+
+                    workout_date = datetime.strptime(workout_row.find('td', {'data-label': 'Date'}).get_text().strip(), "%m/%d/%Y")
+                    distance = convert_string_to_furlongs(workout_row.find('td', {'data-label': 'Distance'}).get_text().strip())
+                    surface = 'D' if 'DIRT' in workout_row.find('td', {'data-label': 'Course'}).get_text().strip().upper() else 'T'
+                    time_seconds = convert_string_to_seconds(workout_row.find('td', {'data-label': 'Time'}).get_text().strip())
+                    note = workout_row.find('td', {'data-label': 'Note'}).get_text().strip().upper()
+                    rank_string = workout_row.find('td', {'data-label': 'Rank'}).get_text().strip()
+                    split_rank_string = rank_string.split('/')
+                    if len(split_rank_string) == 2:
+                        rank = int(split_rank_string[0])
+                        rank_total = int(split_rank_string[1])
+                    else:
+                        rank = 0
+                        rank_total = 0
+                        
+                    # Look up or create the track
+                    try:
+                        track = Tracks.objects.get(code=track_code)
+                    except ObjectDoesNotExist:
+                        # Handle case where track does not exist in the database
+                        print(f"Track with code {track_code} not found.")
+                        continue  # Skip this entry if track does not exist
+
+                    # write workout
+                    # Create or update the race entry
+                    workout, created = Workouts.objects.update_or_create(
+                        track=track,
+                        workout_date=workout_date,
+                        horse = horse,
+                        defaults={
+                            'surface': surface,
+                            'distance': distance,
+                            'time_seconds': time_seconds,
+                            'note': note,
+                            'workout_rank': rank,
+                            'workout_total': rank_total
+                        }
+                    )
+
+
         
 
     # Find the div with id="results"

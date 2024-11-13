@@ -17,12 +17,16 @@ print(f'base dir is {BASE_DIR}')
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / '.env')
 
+# FAIL_LIMIT
+FAIL_LIMIT = 4
 
 def detect_problem(html_content):
     if detect_incapsula_block(html_content):
+        print('incapsula block!')
         return True
     
     if detect_zenrows_422(html_content):
+        print('zenrows 422')
         return True
     
     return False
@@ -50,11 +54,15 @@ def scrape_url_zenrows(url, filename):
         try:
             response = client.get(url)
 
+            print(f'response code was {response.status_code}')
             if response.status_code != 200:
-                continue
+                if response.status_code == 404:
+                    print(f'{url} not found!')
+                    break
+                else:
+                    continue
 
             if full_filepath.name.split('.')[-1] == 'pdf':
-
                 pdf = open(full_filepath, 'wb')
                 pdf.write(response.content)
                 pdf.close()

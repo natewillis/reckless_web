@@ -3,6 +3,7 @@ from horsemen.data_collection.drf.entries import update_all_races_with_drf_entri
 from horsemen.data_collection.utils import SCRAPING_FOLDER
 from horsemen.data_collection.equibase.entries import parse_equibase_entry_url
 from horsemen.data_collection.equibase.horse_results import parse_equibase_horse_results_history
+from horsemen.data_collection.equibase.charts import parse_equibase_chart, get_equibase_chart_pdfs
 
 def parse_equibase_files():
 
@@ -27,6 +28,10 @@ def parse_equibase_files():
             with open(file_path, 'r') as file:
                 html_content = file.read()
             parse_equibase_horse_results_history(html_content)
+            file_path.rename(processed_folder / file_path.name)
+
+        if 'CHART' in file_path.name:
+            parse_equibase_chart(file_path)
             #file_path.rename(processed_folder / file_path.name)
 
 
@@ -37,5 +42,8 @@ def single_run():
 
     # get the entries
     update_all_races_with_drf_entries()
+
+    # get the charts
+    get_equibase_chart_pdfs()
 
 

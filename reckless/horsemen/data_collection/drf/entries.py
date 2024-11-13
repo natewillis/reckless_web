@@ -54,7 +54,8 @@ def update_all_races_with_drf_entries():
                         'purse': race_json.get("purse", 0),
                         'wager_text': race_json.get("wagerText", ""),
                         'breed': drf_breed_word_to_code(race_json.get("breed", "Thoroughbred")),
-                        'cancelled': race_json.get("isCancelled", False)
+                        'cancelled': race_json.get("isCancelled", False),
+                        'race_surface': race_json.get('courseType', 'D')
                     }
                 )
 

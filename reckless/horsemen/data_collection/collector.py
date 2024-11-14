@@ -1,8 +1,7 @@
 from horsemen.data_collection.drf.tracks import get_drf_tracks
-from horsemen.data_collection.drf.entries import update_all_races_with_drf_entries
 from horsemen.data_collection.utils import SCRAPING_FOLDER
-from horsemen.data_collection.equibase.entries import parse_equibase_entry_url
-from horsemen.data_collection.equibase.horse_results import parse_equibase_horse_results_history
+from horsemen.data_collection.equibase.entries import parse_equibase_entry_url, get_equibase_entries_files
+from horsemen.data_collection.equibase.horse_results import parse_equibase_horse_results_history, get_horse_results_files
 from horsemen.data_collection.equibase.charts import parse_equibase_chart, get_equibase_chart_pdfs
 
 def parse_equibase_files():
@@ -37,11 +36,16 @@ def parse_equibase_files():
 
 def single_run():
 
-    # get the tracks
+    # get the tracks results and entries from drf
     get_drf_tracks()
 
-    # get the entries
-    update_all_races_with_drf_entries()
+    # get entries files
+    get_equibase_entries_files()
+    parse_equibase_files()
+
+    # get horse_results
+    get_horse_results_files()
+    parse_equibase_files()
 
     # get the charts
     get_equibase_chart_pdfs()

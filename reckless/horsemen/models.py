@@ -9,7 +9,6 @@ class Tracks(models.Model):
     name = models.CharField(max_length=255)
     time_zone = models.CharField(max_length=32, choices=TIMEZONES, default='UTC')
     country = models.CharField(max_length=3)
-    equibase_chart_name = models.CharField(max_length=255)
 
 
 class Races(models.Model):
@@ -203,6 +202,12 @@ class Races(models.Model):
     cancelled = models.BooleanField(default=False)
     race_surface = models.CharField(max_length=1, choices=RACE_SURFACE, null=True)
 
+    # DRF Results
+    drf_results_import = models.BooleanField(default=False)
+    condition = models.CharField(max_length=255, null=True)
+    off_time = models.DateTimeField(null=True)
+
+
     # EQB Entries
     eqb_entries_import = models.BooleanField(default=False)
 
@@ -282,6 +287,7 @@ class Entries(models.Model):
         ('S', 'Stewards'),
         ('T', 'Trainer'),
         ('V', 'Veterinarian'),
+        ('U', 'Unknown')
     ]
 
     # common data
@@ -296,10 +302,16 @@ class Entries(models.Model):
 
     # drf entries
     drf_entries_import = models.BooleanField(default=False, null=True)
-    scratch_indicator = models.CharField(max_length=1, default='', blank=True)
+    scratch_indicator = models.CharField(max_length=1, default='N', choices=SCRATCH_REASON_CHOICES)
     medication = models.CharField(max_length=7, null=True, blank=True)
     equipment = models.CharField(max_length=17, null=True, blank=True)
     weight = models.FloatField(null=True)
+
+    # drf results
+    drf_results_import = models.BooleanField(default=False, null=True)
+    win_payoff = models.FloatField(default=0, null=True)
+    place_payoff = models.FloatField(default=0, null=True)
+    show_payoff = models.FloatField(default=0, null=True)
 
     # equibase horse_results
     equibase_horse_results_scraped = models.BooleanField(default=False)
@@ -322,3 +334,52 @@ class Workouts(models.Model):
     note = models.CharField(max_length=255)
     workout_rank = models.IntegerField()
     workout_total = models.IntegerField()
+
+class Payoffs(models.Model):
+
+    BET_CHOICES = [
+        ("0", "Choose 6"),
+        ("C", "Classix"),
+        ("Z", "Consolation Double"),
+        ("M", "Consolation Pick 3"),
+        ("8", "Countdown"),
+        ("D", "Daily Double"),
+        ("E", "Exacta"),
+        ("J", "Exactor"),
+        ("N", "Future Wager"),
+        ("X", "Grand Slam"),
+        ("H", "Head2Head"),
+        ("P", "Jockey Challenge"),
+        ("V", "Odd or Even"),
+        ("O", "Omni"),
+        ("F", "Perfecta"),
+        ("G", "Perfector"),
+        ("I", "Pick 10"),
+        ("3", "Pick 3"),
+        ("4", "Pick 4"),
+        ("5", "Pick 5"),
+        ("6", "Pick 6"),
+        ("7", "Pick 7"),
+        ("9", "Pick 9"),
+        ("L", "Place Pick All"),
+        ("Q", "Quinella"),
+        ("1", "Roulette"),
+        ("Y", "Super Bet"),
+        ("B", "Super Tri"),
+        ("S", "Superfecta"),
+        ("U", "Tri Super"),
+        ("A", "Triactor"),
+        ("T", "Trifecta"),
+        ("R", "Triple"),
+        ("W", "Twin Trifecta"),
+        ("2", "Two in the Money"),
+        ("K", "Win Four"),
+        ("HJ", "Super High Five Jackpot")
+    ]
+
+    race = models.ForeignKey('Races', on_delete=models.CASCADE)
+    wager_type = models.CharField(max_length=2, choices=BET_CHOICES)
+    winning_numbers = models.CharField(max_length=255)
+    total_pool = models.FloatField(default=0)
+    payoff_amount = models.FloatField(default=0)
+    base_amount = models.FloatField(default=0)

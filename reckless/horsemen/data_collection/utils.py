@@ -2,6 +2,8 @@ from pathlib import Path
 import re
 import fractions
 from word2number import w2n
+import pytz
+from datetime import datetime
 
 # constants
 HISTORY_FOLDER = Path.cwd().parent / 'scraping_history'
@@ -59,7 +61,14 @@ def convert_string_to_furlongs(distance_string):
 
     # massage string
     distance_string = distance_string.strip().upper()
-    print(f'converting {distance_string}')
+
+    # special case X miles X yards
+    match = re.search(r'(\d+)\s*MILES?\s+(\d+)\s*YARDS?', distance_string)
+    if match:
+        miles = int(match.group(1))
+        yards = int(match.group(2))
+        furlongs = (miles * 8) + (yards / 220)
+        return furlongs
 
     # figure out unit
     conversion_factor = 0
@@ -82,6 +91,18 @@ def convert_string_to_furlongs(distance_string):
         conversion_factor = FURLONGS_PER_YARD
         distance_string = distance_string = distance_string[:-1]
     distance_string = distance_string.strip()
+    
+    # check for fractions
+    if '/' in distance_string:
+        remaining_strings = []
+        for part in distance_string.split(' '):
+            if '/' in part:
+                fraction_value = fractions.Fraction(part)
+            else:
+                remaining_strings.append(part)
+        distance_string = ' '.join(remaining_strings)
+        if distance_string.isnumeric():
+            return (float(distance_string) + fraction_value) * conversion_factor
 
     # if its numeric, and less than 20 its furlongs
     if distance_string.isnumeric():
@@ -168,3 +189,17 @@ def convert_lengths_back_string_to_furlongs(lengths_back_string):
         return 0.3 * FURLONGS_PER_LENGTH
     else:
         return float(sum(fractions.Fraction(term) for term in lengths_back_string.split())) * FURLONGS_PER_LENGTH
+    
+def get_post_time_from_drf(track, race_date, post_time_local_str):
+
+    # Post time calculations
+    try:
+        original_tz = pytz.timezone(track.time_zone)
+        post_time_local = datetime.strptime(post_time_local_str, "%I:%M %p")
+        post_time_datetime = datetime.combine(race_date, post_time_local.time())
+        post_time_localized = original_tz.localize(post_time_datetime)
+        post_time_utc = post_time_localized.astimezone(pytz.UTC)
+    except (ValueError, TypeError):
+        post_time_utc = None
+
+    return post_time_utc

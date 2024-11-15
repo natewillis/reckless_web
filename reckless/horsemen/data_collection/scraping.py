@@ -2,14 +2,13 @@
 from zenrows import ZenRowsClient
 
 # support
+import logging
 import environ
 from pathlib import Path
-from datetime import datetime, timedelta
-import time
-import random
-import os
-from horsemen.data_collection.proxies.proxies import create_proxy_list
 from horsemen.data_collection.utils import SCRAPING_FOLDER
+
+# init logging
+logger = logging.getLogger(__name__)
 
 # setup path to env file to get zenrows api
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,15 +17,15 @@ env = environ.Env()
 environ.Env.read_env(BASE_DIR / '.env')
 
 # FAIL_LIMIT
-FAIL_LIMIT = 4
+FAIL_LIMIT = 2
 
 def detect_problem(html_content):
     if detect_incapsula_block(html_content):
-        print('incapsula block!')
+        logger.error('incapsula block!')
         return True
     
     if detect_zenrows_422(html_content):
-        print('zenrows 422')
+        logger.error('zenrows 422')
         return True
     
     return False
@@ -43,29 +42,46 @@ def detect_zenrows_422(html_content):
     return False
 
 def scrape_url_zenrows(url, filename):
+    return
 
     # create filepath
     full_filepath = SCRAPING_FOLDER / filename
 
+    # init counter
+    fail_counter = 0
+
     while not Path(full_filepath).exists():
+
+        fail_counter += 1
+        if fail_counter > FAIL_LIMIT:
+            return
 
         client = ZenRowsClient(env('ZENROWS_API_KEY'))
 
         try:
             response = client.get(url)
 
-            print(f'response code was {response.status_code}')
+            logger.info(f'response code for {url} was {response.status_code}')
             if response.status_code != 200:
                 if response.status_code == 404:
                     print(f'{url} not found!')
                     break
                 else:
+                    print(response.text)
                     continue
 
             if full_filepath.name.split('.')[-1] == 'pdf':
+
+                # write file
                 pdf = open(full_filepath, 'wb')
                 pdf.write(response.content)
                 pdf.close()
+
+                # validate size
+                if full_filepath.stat().st_size < (25*1024):
+                    logger.warning(f'{full_filepath} was too small, deleting and trying again')
+                    full_filepath.unlink()
+                    continue
 
             else:
 
@@ -78,9 +94,9 @@ def scrape_url_zenrows(url, filename):
                 with open(full_filepath, 'w', encoding='utf-8') as file:
                     file.write(html_content)
             
-            print(f"Content successfully saved to {full_filepath}")
+            logger.info(f"Content successfully saved to {full_filepath}")
 
 
         except Exception as e:  # Handle all exceptions
 
-            print(f"An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")

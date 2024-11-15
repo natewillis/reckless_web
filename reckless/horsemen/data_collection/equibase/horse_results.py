@@ -1,25 +1,29 @@
+
 from bs4 import BeautifulSoup
+import logging
 import re
-from pathlib import Path
 from datetime import datetime
 from horsemen.data_collection.scraping import scrape_url_zenrows
 from horsemen.data_collection.utils import SCRAPING_FOLDER, convert_string_to_furlongs, convert_string_to_seconds
 from horsemen.models import Tracks, Races, Entries, Horses, Workouts
-from django.db.models import Q
+from django.core.exceptions import ValidationError
 from django.utils import timezone
-from django.core.exceptions import ObjectDoesNotExist
+
+
+# init logging
+logger = logging.getLogger(__name__)
 
 
 def get_horse_results_files():
 
     # find horses whos entries havent been scraped in horse_results
     horses_future_races = Horses.objects.filter(
-        entries__equibase_horse_results_scraped=False,
+        entries__equibase_horse_results_import=False,
         entries__race__race_date__gte=timezone.now().date()
     ).distinct()
 
     horses_past_races = Horses.objects.filter(
-        entries__equibase_horse_results_scraped=False,
+        entries__equibase_horse_results_import=False,
         entries__race__race_date__lt=timezone.now().date()
     ).distinct()
 
@@ -27,12 +31,18 @@ def get_horse_results_files():
     
     for horse in horses:
         
-        print(f'scraping {horse.horse_name}')
+        # logging
+        logger.info(f'in get_horse_results_files, scraping {horse.horse_name}')
 
         # create horse url
-        horse_result_url = f'https://www.equibase.com/profiles/Results.cfm?type=Horse&refno={horse.equibase_horse_id}&registry={horse.equibase_horse_registry}&rbt={horse.equibase_horse_type}'
+        horse_result_url = horse.get_equibase_horse_results_url()
         horse_filename = f'EQB_HORSERESULTS_{horse.equibase_horse_id}_{datetime.now().strftime('%Y%m%d')}.html'
         horse_full_filename = SCRAPING_FOLDER / horse_filename
+
+        # validate url
+        if horse_result_url == '':
+            logger.error(f'in get_horse_results_files, {horse.horse_name} couldnt generate a url')
+            continue
 
         # verify it isnt already there
         if not horse_full_filename.exists():
@@ -42,7 +52,7 @@ def get_horse_results_files():
 
         else:
 
-            print(f'{horse_filename} already scraped!')
+            logger.info(f'{horse_filename} already scraped!')
 
 def parse_equibase_horse_results_history(html_content):
 
@@ -54,7 +64,16 @@ def parse_equibase_horse_results_history(html_content):
     horse = None
     if horse_id_checkbox:
         horse_id = int(horse_id_checkbox['data-comid'])
-        horse = Horses.objects.get(equibase_horse_id=horse_id)
+        horse = Horses.objects.filter(equibase_horse_id=horse_id).first()
+        if not horse:
+            horse = Horses.objects.update_or_create(
+                horse_name=horse_id_checkbox['data-comname'].upper().strip(),
+                defaults={
+                    'equibase_horse_id': horse_id,
+                    'equibase_horse_type': horse_id_checkbox['data-comrbt'].upper().strip(),
+                    'equibase_horse_registry': horse_id_checkbox['data-comreg'].upper().strip(),
+                }
+            )
 
     else:
 
@@ -67,10 +86,11 @@ def parse_equibase_horse_results_history(html_content):
             refno_match = re.search(r'refno=(\d+)', href)
             horse_id = int(refno_match.group(1)) if refno_match else None
             if horse_id:
-                horse = Horses.objects.get(equibase_horse_id=horse_id)
+                horse = Horses.objects.filter(equibase_horse_id=horse_id).first()
 
     if not horse:
-        print('horse not found')
+        logger.error(f'in parse_equibase_horse_results_history, horse not found {horse_id_checkbox}')
+        return
 
     # Find the div with id="entries"
     entries_div = soup.find('div', id='entries')
@@ -95,32 +115,33 @@ def parse_equibase_horse_results_history(html_content):
                 race_number = int(entries_row.find('td', class_='race').get_text().strip())
 
                 # Look up or create the track
-                try:
-                    track = Tracks.objects.get(code=track_code)
-                except ObjectDoesNotExist:
+                track = Tracks.objects.filter(code=track_code).first()
+                if not track:
                     # Handle case where track does not exist in the database
-                    print(f"Track with code {track_code} not found.")
+                    logger.error(f"in parse_equibase_horse_results_history, track with code {track_code} not found.")
                     continue  # Skip this entry if track does not exist
 
                 # Create or update the race entry
-                race, created = Races.objects.update_or_create(
-                    track=track,
-                    race_date=race_date,
-                    race_number=race_number,
-                    defaults={
-                        'track': track,
-                        'race_date': race_date,
-                        'race_number': race_number,
-                    }
-                )
+                try:
+                    race, created = Races.objects.update_or_create(
+                        track=track,
+                        race_date=race_date,
+                        race_number=race_number,
+                    )
+                except ValidationError as e:
+                    logger.error(f'in parse_equibase_horse_results_history, failed to save race due to {e.message_dict}')
+                    return
 
-                if horse:
+                try:
                     entry, created = Entries.objects.update_or_create(
                         race=race,
                         horse=horse, defaults={
                             'equibase_horse_entries_scraped': True
                         }
                     )
+                except ValidationError as e:
+                    logger.error(f'in parse_equibase_horse_results_history, failed to save entry due to {e.message_dict}')
+                    return
 
     # Find the div with id="entries"
     workout_div = soup.find('div', id='workouts')
@@ -160,37 +181,38 @@ def parse_equibase_horse_results_history(html_content):
                         rank_total = 0
                         
                     # Look up or create the track
-                    try:
-                        track = Tracks.objects.get(code=track_code)
-                    except ObjectDoesNotExist:
+                    track = Tracks.objects.filter(code=track_code).first()
+                    if not track:
                         # Handle case where track does not exist in the database
-                        print(f"Track with code {track_code} not found.")
+                        logger.error(f"in parse_equibase_horse_results_history, track with code {track_code} not found.")
                         continue  # Skip this entry if track does not exist
 
                     # write workout
                     # Create or update the race entry
-                    workout, created = Workouts.objects.update_or_create(
-                        track=track,
-                        workout_date=workout_date,
-                        horse = horse,
-                        defaults={
-                            'surface': surface,
-                            'distance': distance,
-                            'time_seconds': time_seconds,
-                            'note': note,
-                            'workout_rank': rank,
-                            'workout_total': rank_total
-                        }
-                    )
+                    try:
+                        workout, created = Workouts.objects.update_or_create(
+                            track=track,
+                            workout_date=workout_date,
+                            horse = horse,
+                            defaults={
+                                'surface': surface,
+                                'distance': distance,
+                                'time_seconds': time_seconds,
+                                'note': note,
+                                'workout_rank': rank,
+                                'workout_total': rank_total
+                            }
+                        )
+                    except ValidationError as e:
+                        logger.error(f'in parse_equibase_horse_results_history, failed to save workout due to {e.message_dict}')
+                    
 
-
-        
 
     # Find the div with id="results"
     results_div = soup.find('div', id='results')
     if not results_div:
+        logger.info('in parse_equibase_horse_results_history, no results reported')
         return
-    
     
     
     # parse results rows
@@ -218,26 +240,24 @@ def parse_equibase_horse_results_history(html_content):
                 speed_rating = int(speed_rating_text.get_text().strip())
                 
         # Look up or create the track
-        try:
-            track = Tracks.objects.get(code=track_code)
-        except ObjectDoesNotExist:
+        track = Tracks.objects.filter(code=track_code).first()
+        if not track:
             # Handle case where track does not exist in the database
-            print(f"Track with code {track_code} not found.")
+            logger.error(f"in parse_equibase_horse_results_history, track with code {track_code} not found.")
             continue  # Skip this entry if track does not exist
 
         # Create or update the race entry
-        race, created = Races.objects.update_or_create(
-            track=track,
-            race_date=race_date,
-            race_number=race_number,
-            defaults={
-                'track': track,
-                'race_date': race_date,
-                'race_number': race_number,
-            }
-        )
-
-        if horse:
+        try:
+            race, created = Races.objects.update_or_create(
+                track=track,
+                race_date=race_date,
+                race_number=race_number,
+            )
+        except ValidationError as e:
+            logger.error(f'in parse_equibase_horse_results_history, failed to save race due to {e.message_dict}')
+                    
+        # create entry for this horse if needed
+        try:
             entry, created = Entries.objects.update_or_create(
                 race=race,
                 horse=horse, defaults={
@@ -245,10 +265,6 @@ def parse_equibase_horse_results_history(html_content):
                     'equibase_horse_results_scraped': True
                 }
             )
-
-
-if __name__ == "__main__":
-
-
-    with open('..\\test_data\\EQB_HORSE_RESULTS.html', 'r') as file:
-        parse_equibase_horse_results_history(file.read())
+        except ValidationError as e:
+            logger.error(f'in parse_equibase_horse_results_history, failed to save entry due to {e.message_dict}')
+            

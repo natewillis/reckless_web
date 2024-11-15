@@ -1,33 +1,57 @@
 import pdfplumber 
+import logging
 import re
+from collections import OrderedDict
 from datetime import datetime
-from horsemen.data_collection.utils import SCRAPING_FOLDER, convert_string_to_furlongs, convert_string_to_seconds, convert_lengths_back_string_to_furlongs
-from horsemen.models import Races
+from django.core.exceptions import ValidationError
+from fuzzywuzzy import process
+from horsemen.data_collection.utils import SCRAPING_FOLDER, get_best_choice_from_description_code, \
+    convert_string_to_furlongs, convert_string_to_seconds, convert_lengths_back_string, \
+    get_point_of_call_object_from_furlongs, get_fractional_time_object_from_furlongs
+from horsemen.models import Races, Tracks, Entries, Horses, PointsOfCall, FractionalTimes
 from horsemen.data_collection.scraping import scrape_url_zenrows
 
+# init logging
+logger = logging.getLogger(__name__)
+
 def get_equibase_chart_pdfs():
-
-    # query
-    distinct_track_dates = Races.objects.filter(eqb_chart_import=False).values('track__code', 'track__country', 'race_date').distinct()
-
-    for track_date in distinct_track_dates:
-
-        # split dict
-        track_code = track_date['track__code']
-        track_country = track_date['track__country']
-        race_date = track_date['race_date']
+    
+    # init ordered dict
+    track_date_set = OrderedDict()
+    
+    # get races
+    for race in Races.objects.order_by('-race_date'):
+        for entry in race.entries_set.all():
+            horse = entry.horse
+            for horse_race in Races.objects.filter(
+                    entry__horse=horse,
+                    equibase_chart_import=False
+                ).order_by('-race_date'):
+                
+                # create tuple
+                track_date_tuple = (horse_race.track, horse_race.race_date)
+                
+                # store in dict
+                if track_date_tuple not in track_date_set:
+                    track_date_set[track_date_tuple] = True
+    
+    for track_date_tuple in list(track_date_set.keys()):
+        
+        # split the tuple
+        track, race_date = track_date_tuple
 
         # create pdf url
-        pdf_url = f'https://www.equibase.com/premium/eqbPDFChartPlus.cfm?RACE=A&BorP=P&TID={track_code}&CTRY={track_country}&DT={race_date.strftime('%m/%d/%Y')}&DAY=D&STYLE=EQB'
-        filename = f'EQB_CHART_{track_code}_{race_date.strftime('%Y%m%d')}.pdf'
+        pdf_url = track.get_equibase_chart_url_for_date(race_date)
+        filename = f'EQB_CHART_{track.code}_{race_date.strftime('%Y%m%d')}.pdf'
         pdf_full_filename = SCRAPING_FOLDER / filename
 
         # verify it isnt already there
         if not pdf_full_filename.exists():
-            print(f'scraping {pdf_url}')
+            logger.info(f'in get_equibase_chart_pdfs, scraping {pdf_url}')
         
             # get pdf
             scrape_url_zenrows(pdf_url, filename)
+
 
 def get_text_with_spaces(line):
 
@@ -139,53 +163,40 @@ def get_race_info(page):
     lines = [line for line in lines if len(line['text'])>4]
 
     # Join the words to form the full line
-    first_line_data = lines[0]['text'].replace(' ','').split('-')
+    first_line_data = get_text_with_spaces(lines[0]).split(' - ')
 
     # check the structure
     if not len(first_line_data) == 3:
         return race_info
-    if not 'Race' in first_line_data[2]:
+    if 'Race' not in first_line_data[2]:
         return race_info
 
     # store track, date, and race
-    race_info['track'] = first_line_data[0]
-    race_info['date'] = datetime.strptime(first_line_data[1], '%B%d,%Y')
-    race_info['race'] = int(first_line_data[2].replace('Race', ''))
+    race_info['track'] = first_line_data[0].strip().upper()
+    race_info['date'] = datetime.strptime(first_line_data[1], '%B %d, %Y')
+    race_info['race'] = int(first_line_data[2].replace('Race ', ''))
 
     # race type
-    second_line_data = lines[1]['text'].replace(' ','').split('-')
-    race_info['race_type'] = second_line_data[0]
-    race_info['horse_type'] = second_line_data[1]
+    second_line_data = get_text_with_spaces(lines[1]).split(' - ')
+    race_info['race_type'] = get_best_choice_from_description_code(second_line_data[0],Races.EQUIBASE_RACE_TYPE_CHOICES)
+    race_info['horse_type'] = get_best_choice_from_description_code(second_line_data[1],Races.BREED_CHOICES)
 
     # age/sex
-    third_line_text = lines[2]['text']
-    if '.' not in third_line_text:
-        third_line_text += lines[3]['text']
-    race_info['age_sex_restrictions'] = third_line_text.split('.')[0]
+    # TODO: manually specify the OPEN restrictions
+    current_line = 2
+    general_race_data = []
+    while 'Distance:' not in lines[current_line] and current_line < 6:
+        general_race_data.append(get_text_with_spaces(lines[current_line]))
+        current_line += 1
+    general_race_line = ' '.join(general_race_data)
+    
+    open_sex = True
+    for sex_type in ['FILLIES', 'MARES', 'COLTS', 'GELDINGS']:
+        if sex_type in general_race_line.split('.')[0]:
+            open_sex = False
+    race_info['sex_restriction'] = 'O' if open_sex else get_best_choice_from_description_code(general_race_line.split('.')[0],Races.DRF_SEX_RESTRICTION_CHOICES)
+    race_info['age_restriction'] = get_best_choice_from_description_code(general_race_line.split('.')[0],Races.DRF_AGE_RESTRICTION_CHOICES)
 
-    # search for things
-    for line in lines:
-
-        # remove spaces though this should be done
-        line_text = line['text'].replace(' ','')
-
-        # distance/surface
-        if 'Distance:' in line_text and 'OnThe' in line_text:
-            distance_type_string = get_text_with_spaces(line).split('Current')[0].replace('Distance:','').strip()
-            race_info['distance']=convert_string_to_furlongs(distance_type_string.split(' On The ')[0])
-            race_info['surface']=distance_type_string.split(' On The ')[1].strip()
-
-        # purse
-        if 'Purse:$' in line_text:
-            pattern = r'\$\d{1,3}(?:,\d{3})*'
-            match = re.search(pattern, line_text)
-            if match:
-                race_info['purse'] = int(match.group(0).replace('$', '').replace(',', ''))
-
-        # weather/ Track
-        if 'Weather:' in line_text:
-            race_info['weather']=line_text.replace('Weather:','').split('Track:')[0]
-            race_info['condition']=line_text.split('Track:')[1].upper().strip()
 
     # search for things without spaces
     race_info_table = False
@@ -195,6 +206,29 @@ def get_race_info(page):
     header_positions = {}
     for line in lines:
 
+        # Single line work
+        line_text = get_text_with_spaces(line)
+
+        # distance/surface
+        if 'Distance:' in line_text and ' On The ' in line_text:
+            distance_type_string = get_text_with_spaces(line).split('Current')[0].replace('Distance:','').strip()
+            race_info['distance']=convert_string_to_furlongs(distance_type_string.split(' On The ')[0])
+            race_info['surface']='D' if 'DIRT' in distance_type_string.split(' On The ')[1].strip().upper() else 'T'
+
+        # purse
+        if 'Purse: $' in line_text:
+            pattern = r'\$\d{1,3}(?:,\d{3})*'
+            match = re.search(pattern, line_text)
+            if match:
+                race_info['purse'] = int(match.group(0).replace('$', '').replace(',', ''))
+
+        # weather/ Track
+        if 'Weather: ' in line_text:
+            race_info['weather']=line_text.replace('Weather: ','').split('Track:')[0]
+            race_info['condition']=line_text.split('Track:')[1].upper().strip()
+
+
+        ##### TABLE WORK #####
         # fractional times
         if 'FractionalTimes:' in line['text']:
             race_info_table = False # first line after race info table
@@ -213,7 +247,7 @@ def get_race_info(page):
             if value_dict['PGM']['normal_text'] == '':
                 continue
             # parse dict into return
-            program_number = value_dict['PGM']['normal_text'].strip()
+            program_number = value_dict['PGM']['normal_text'].strip().upper()
             race_info['entries'][program_number]['points_of_call'] = {}
             for label in header_order:
                 if label == 'PGM' or label =='HORSENAME':
@@ -222,11 +256,9 @@ def get_race_info(page):
                     continue
                 race_info['entries'][program_number]['points_of_call'][label] = {
                     'position': int(value_dict[label]['normal_text']),
-                    'lengths_back': 0 if value_dict[label]['super_text']=='' else convert_lengths_back_string_to_furlongs(value_dict[label]['super_text']),
+                    'lengths_back': 0 if value_dict[label]['super_text']=='' else convert_lengths_back_string(value_dict[label]['super_text']),
                     'point_of_call': label
                 }
-
-
 
         # a new race info line
         if race_info_table:
@@ -238,7 +270,7 @@ def get_race_info(page):
                 continue
 
             # parse dict into return
-            program_number = value_dict['PGM']['normal_text'].strip()
+            program_number = value_dict['PGM']['normal_text'].strip().upper()
             race_info['entries'][program_number]={'program_number': program_number}
 
             # horsename
@@ -246,7 +278,7 @@ def get_race_info(page):
             pattern = r'^[^(]+'
             match = re.match(pattern, horse_jockey_text)
             if match:
-                race_info['entries'][program_number]['horse_name'] = match.group(0).strip()
+                race_info['entries'][program_number]['horse_name'] = match.group(0).strip().upper()
 
             # PP
             race_info['entries'][program_number]['post_position']=int(value_dict['PP']['normal_text'].strip())
@@ -279,6 +311,132 @@ def get_race_info(page):
             
     # return variable
     return race_info
+
+def store_race_info_in_table(race_info):
+    
+    # get track
+    track = Tracks.objects.filter(name=race_info['track']).first()
+    if track is None:
+
+        # logging
+        logger.info(f'in store_race_info_in_table, {race_info["track"]} doesnt match existing tracks')
+
+        # Retrieve all track names from the database
+        track_names = list(Tracks.objects.values_list('name', flat=True))
+
+        # Use fuzzywuzzy to find the closest match
+        closest_match, match_score = process.extractOne(race_info['track'], track_names)
+        
+        # Check if the match score meets the threshold
+        if match_score >= 80:
+            track = Tracks.objects.filter(name=closest_match).first()
+        else:
+            logger.error(f'in store_race_info_in_table, {race_info["track"]} doesnt match existing tracks with fuzzywuzzy')
+            return
+        
+    # get race
+    race, created = Races.objects.update_or_create(
+        track=track,
+        race_date=race_info['date'],
+        race_number=race_info['race'],
+    )
+    if not race.drf_entries_import and not race.drf_results_import:
+        race.age_restriction = race_info['age_restriction']
+        race.sex_restriction = race_info['sex_restriction']
+        race.distance = race_info['distance']
+        race.race_surface = race_info['surface']
+        race.purse = race_info['purse']
+        race.breed = race_info['horse_type']
+        race.condition = race_info['condition']
+    elif not race.drf_results_import:
+        race.condition = race_info['condition']
+    race.equibase_chart_import = True
+    try:
+        race.save()
+    except ValidationError as e:
+        logger.error(f'in store_race_info_in_table, failed to save race due to {e.error_list}')
+        return
+    
+    # fractional times
+    fractional_time_object = get_fractional_time_object_from_furlongs(race.distance)
+    fractional_time_data = race_info.get('fractional_times', [])
+    if fractional_time_object and len(fractional_time_data) == len(fractional_time_object['fractionals']):
+        for index, fractional_time in enumerate(fractional_time_data):
+            FractionalTimes.objects.get_or_create(
+                race=race,
+                point=fractional_time_object['fractionals'][index]['point'],
+                defaults={
+                    'text': fractional_time_object['fractionals'][index].get('text',''),
+                    'distance': fractional_time_object['fractionals'][index].get('feet',0)/660,
+                    'time': fractional_time
+                }
+            )
+    else:
+        if race.distance > 2.5 and race.breed == 'TB':
+            if fractional_time_object and len(fractional_time_data) > 0:
+                logger.error(f'in store_race_info_in_table, the number of ractional times ({len(fractional_time_data)}) are wrong compared to the object ({len(fractional_time_object['fractionals'])}) for race distance of {race.distance*660}!')
+            elif not fractional_time_object:
+                logger.warning(f'no fractional object for race distance of {race.distance}')
+    
+    # go through entries
+    for entry_data in race_info['entries'].values():
+
+        # see if you can find an existing entry first
+        entry = Entries.objects.filter(
+            race=race,
+            program_number=entry_data['program_number']
+        ).first()
+
+        # retrieve it through the horse if we dont have a program nubmer, create if it truly doesnt exist
+        if not entry:
+            horse, created = Horses.objects.get_or_create(
+                horse_name=entry_data['horse_name']
+            )
+            entry, created = Entries.objects.get_or_create(
+                race=race,
+                horse=horse,
+                defaults={
+                    'program_number': entry_data['program_number'],
+                    'post_position': entry_data['post_position']
+                }
+            )
+
+        # race comment
+        if entry.comment is None:
+            entry.comment = entry_data['comments']
+            try:
+                entry.save()
+            except ValidationError as e:
+                logger.error(f'in store_race_info_in_table, failed to save entry due to {e.error_list}')
+                continue
+        
+        # points of call
+        point_of_call_object = get_point_of_call_object_from_furlongs(race.distance)
+        points_of_call = entry_data.get('points_of_call', [])
+        if point_of_call_object and len(points_of_call) == len(point_of_call_object['calls']):
+            for index, point_of_call_data in enumerate(points_of_call.values()):
+                PointsOfCall.objects.get_or_create(
+                    entry=entry,
+                    point=point_of_call_object['calls'][index]['point'],
+                    defaults = {
+                        'distance': point_of_call_object['calls'][index].get('feet',0)/660,
+                        'position': point_of_call_data['position'],
+                        'lengths_back': point_of_call_data['lengths_back'],
+                        'text': point_of_call_object['calls'][index]['text']
+                    }
+                )
+        else:
+            if race.distance > 2.5 and race.breed == 'TB':
+                if point_of_call_object and len(points_of_call) > 0:
+                    logger.error(f'in store_race_info_in_table, the number of points of call ({len(points_of_call)}) are wrong compared to the object ({len(point_of_call_object['calls'])}) for race distance of {race.distance*660}!')
+                elif not point_of_call_object:
+                    logger.warning(f'no points of call object for race distance of {race.distance}')
+        
+
+        
+          
+    
+    
     
 def parse_equibase_chart(filename):
 
@@ -294,6 +452,7 @@ def parse_equibase_chart(filename):
         if not race_info:
             continue
 
-        print(get_race_info(page))
+        # store data
+        store_race_info_in_table(race_info=race_info)
 
     pdf.close

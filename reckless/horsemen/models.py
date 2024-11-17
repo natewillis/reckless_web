@@ -374,7 +374,7 @@ class Horses(models.Model):
                     _("Required equibase_horse_type"),
                     code='missing_input'
                 )
-            elif len(self.equibase_horse_type) != 3:
+            elif len(self.equibase_horse_type) < 2:
                  raise ValidationError(
                     _("Invalid equibase_horse_type: %(value)"),
                     params={'value': self.equibase_horse_type},

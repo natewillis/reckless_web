@@ -64,14 +64,17 @@ def parse_equibase_horse_results_history(html_content):
     horse = None
     if horse_id_checkbox:
         horse_id = int(horse_id_checkbox['data-comid'])
+        horse_name = horse_id_checkbox['data-comname'].upper().strip()
+        horse_type = horse_id_checkbox['data-comrbt'].upper().strip()
+        horse_registry = horse_id_checkbox['data-comreg'].upper().strip()
         horse = Horses.objects.filter(equibase_horse_id=horse_id).first()
         if not horse:
-            horse = Horses.objects.update_or_create(
-                horse_name=horse_id_checkbox['data-comname'].upper().strip(),
+            horse, created = Horses.objects.update_or_create(
+                horse_name=horse_name,
                 defaults={
                     'equibase_horse_id': horse_id,
-                    'equibase_horse_type': horse_id_checkbox['data-comrbt'].upper().strip(),
-                    'equibase_horse_registry': horse_id_checkbox['data-comreg'].upper().strip(),
+                    'equibase_horse_type': horse_type,
+                    'equibase_horse_registry': horse_registry,
                 }
             )
 
@@ -136,7 +139,7 @@ def parse_equibase_horse_results_history(html_content):
                     entry, created = Entries.objects.update_or_create(
                         race=race,
                         horse=horse, defaults={
-                            'equibase_horse_entries_scraped': True
+                            'equibase_horse_entries_import': True
                         }
                     )
                 except ValidationError as e:
@@ -262,7 +265,7 @@ def parse_equibase_horse_results_history(html_content):
                 race=race,
                 horse=horse, defaults={
                     'equibase_speed_rating': speed_rating,
-                    'equibase_horse_results_scraped': True
+                    'equibase_horse_results_import': True
                 }
             )
         except ValidationError as e:

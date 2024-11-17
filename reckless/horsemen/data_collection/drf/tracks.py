@@ -150,7 +150,7 @@ def import_drf_results(track, race_date):
                     horse__horse_name=horse_name,
                 ).first()
                 if not entry:
-                    horse = Horses.objects.update_or_create(
+                    horse, created = Horses.objects.update_or_create(
                         horse_name=horse_name
                     )
                     entry = Entries.objects.create(

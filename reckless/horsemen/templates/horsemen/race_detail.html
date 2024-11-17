@@ -1,0 +1,78 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block title %}Race Details - {{ race.track.name }} Race {{ race.race_number }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="mb-4">
+        <h1>{{ race.track.name }} - Race {{ race.race_number }}</h1>
+        <h4 class="text-muted">{{ race.race_date|date:"F d, Y" }} at {{ race.post_time|date:"g:i A" }}</h4>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2 class="h4 mb-0">Race Information</h2>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Surface:</strong> {{ race.get_race_surface_display }}</p>
+                    <p><strong>Distance:</strong> {{ race.distance }} Furlongs</p>
+                    <p><strong>Race Type:</strong> {{ race.get_race_type_display|default:"N/A" }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Purse:</strong> ${{ race.purse|default:"0"|intcomma }}</p>
+                    <p><strong>Age Restriction:</strong> {{ race.get_age_restriction_display|default:"N/A" }}</p>
+                    <p><strong>Sex Restriction:</strong> {{ race.get_sex_restriction_display|default:"N/A" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="h4 mb-0">Entries</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>PP</th>
+                            <th>Program #</th>
+                            <th>Horse</th>
+                            <th>Jockey</th>
+                            <th>Trainer</th>
+                            <th>Weight</th>
+                            <th>Med/Equip</th>
+                            <th>Comment</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                        <tr {% if entry.scratch_indicator != 'N' %}class="table-secondary"{% endif %}>
+                            <td>{{ entry.post_position }}</td>
+                            <td>{{ entry.program_number }}</td>
+                            <td>{{ entry.horse.horse_name }}</td>
+                            <td>{{ entry.jockey.first_name }} {{ entry.jockey.last_name }}</td>
+                            <td>{{ entry.trainer.first_name }} {{ entry.trainer.last_name }}</td>
+                            <td>{{ entry.weight|default:"" }}</td>
+                            <td>
+                                {% if entry.medication %}{{ entry.medication }}{% endif %}
+                                {% if entry.equipment %}/{{ entry.equipment }}{% endif %}
+                            </td>
+                            <td>{{ entry.comment|default:"" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center">No entries found for this race.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

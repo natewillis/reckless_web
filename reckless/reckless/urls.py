@@ -8,4 +8,5 @@ urlpatterns = [
     path('', include('core.urls')),
     path('blog/', include('blog.urls')),
     path('markdownx/', include('markdownx.urls')),
+    path('horsemen/', include('horsemen.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

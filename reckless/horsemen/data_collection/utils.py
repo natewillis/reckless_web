@@ -6,22 +6,71 @@ import pytz
 from datetime import datetime
 from fuzzywuzzy import process
 import logging
+import numpy as np
+from scipy.interpolate import InterpolatedUnivariateSpline
 
-# init logging
+
+# Configure logging
 logger = logging.getLogger(__name__)
 
-# constants
-HISTORY_FOLDER = Path.cwd().parent / 'scraping_history'
+# Constants
+METERS_PER_FURLONG = 201.168
+METERS_PER_LENGTH = 2.4384
 
-# pathing for where to put the file
-SCRAPING_FOLDER = Path.cwd()
-print(SCRAPING_FOLDER)
-if SCRAPING_FOLDER.parts[-1] == 'reckless_web':
-    HISTORY_FOLDER = SCRAPING_FOLDER / 'scraping_history'
-    SCRAPING_FOLDER = SCRAPING_FOLDER / 'files_to_scrape'
+# Folder Paths
+BASE_FOLDER = Path.cwd()
+if BASE_FOLDER.name == 'reckless_web':
+    HISTORY_FOLDER = BASE_FOLDER / 'scraping_history'
+    SCRAPING_FOLDER = BASE_FOLDER / 'files_to_scrape'
 else:
-    HISTORY_FOLDER = SCRAPING_FOLDER.parent / 'scraping_history'
-    SCRAPING_FOLDER = SCRAPING_FOLDER.parent / 'files_to_scrape'
+    HISTORY_FOLDER = BASE_FOLDER.parent / 'scraping_history'
+    SCRAPING_FOLDER = BASE_FOLDER.parent / 'files_to_scrape'
+logger.info("Paths initialized: HISTORY_FOLDER=%s, SCRAPING_FOLDER=%s", HISTORY_FOLDER, SCRAPING_FOLDER)
+
+# Resources
+POINTS_OF_CALL_QH = [
+  {
+    "distance": "Less than 330 yards",
+    "floor": 0,
+    "calls": [
+      {
+        "point": 1,
+        "text": "Start"
+      },
+      {
+        "point": 5,
+        "text": "Str"
+      },
+      {
+        "point": 6,
+        "text": "Fin"
+      }
+    ]
+  },
+  {
+    "distance": "330 Yards and Longer",
+    "floor": 990,
+    "calls": [
+      {
+        "point": 1,
+        "text": "Start"
+      },
+      {
+        "point": 2,
+        "text": "Str1"
+      },
+      {
+        "point": 5,
+        "text": "Str"
+      },
+      {
+        "point": 6,
+        "text": "Fin"
+      }
+    ]
+  }
+]
+
 
 POINTS_OF_CALL = [
   {
@@ -2748,9 +2797,6 @@ def convert_string_to_seconds(time_string):
 
 def convert_lengths_back_string(lengths_back_string):
 
-    # constants
-    FURLONGS_PER_LENGTH = 0.0121212
-
     # Process
     lengths_back_string = lengths_back_string.upper().strip()
 
@@ -2862,18 +2908,180 @@ def get_fractional_time_object_from_furlongs(distance_furlongs):
             return last_fractional_object
         last_fractional_object = fractional_object
 
-def get_point_of_call_object_from_furlongs(distance_furlongs):
+def get_point_of_call_object_from_furlongs(distance_furlongs, quarter_horse_flag=False):
 
     # convert furlongs to feet
     distance_feet = distance_furlongs * 660
     logger.debug(f' in get_point_of_call_object_from_furlongs, looking for {distance_feet} feet')
 
+    #  quarterhorse
+    if quarter_horse_flag:
+        points_of_call_to_use = POINTS_OF_CALL_QH
+    else:
+        points_of_call_to_use = POINTS_OF_CALL
+    
     # Figure out which fractional time object we need
     last_point_of_call_object = None
-    for point_of_call_object in POINTS_OF_CALL:
+    for point_of_call_object in points_of_call_to_use:
         if distance_feet<point_of_call_object['floor']-10:
             logger.debug(f'for {distance_feet} feet returning point of call for {last_point_of_call_object['floor']}')
             return last_point_of_call_object
         last_point_of_call_object = point_of_call_object
+        
+def create_fractional_data_from_array_and_object(fractional_times, race_distance):
+
+    # init return
+    fractional_data = []
+
+    # get fractional object
+    fractional_object = get_fractional_time_object_from_furlongs(race_distance)
+
+    # edge cases
+    if fractional_times is None or len(fractional_times) == 0:
+        logger.warning('in create_fractional_data_from_array_and_object, both fractional_times and fractional_object are none')
+        return fractional_data
+    if fractional_object is None or len(fractional_times) == 1:
+        # the only thing we know for sure in this case is that the final time is
+        # a the race distance
+        fractional_data.append({
+            'point': 6,
+            'text': 'FIN',
+            'distance': race_distance,
+            'time': fractional_times[-1]
+        })
+        logger.warning('in create_fractional_data_from_array_and_object, fractional_object is empty so only returning final')
+        return fractional_data
+    if len(fractional_times) == len(fractional_object['fractionals']):
+        logger.info('in create_fractional_data_from_array_and_object, fractional times match!')
+        for index, fractional_time in enumerate(fractional_times):
+            fractional = fractional_object['fractionals'][index]
+            fractional_data.append({
+                'point': fractional['point'],
+                'text': 'FIN' if index+1 == len(fractional_times) else fractional['text'].upper(),
+                'distance': race_distance if index+1 == len(fractional_times) else fractional['feet']/660,
+                'time': fractional_time
+            })
+        return fractional_data
+    else:
+        # do our best to map the times to the fractional object
+        # setup variables needed inside either loop
+        final_time = fractional_times[-1]
+        average_velocity = race_distance/final_time # furlongs per second
+        fractionals_copy = fractional_object['fractionals'].copy()[:-1] # all but the last one, we automatically map that to final
+        fractional_times_copy = fractional_times.copy()[:-1] # samesies
+        
+        # more fractionals means map closest fractional to each time
+        if len(fractionals_copy)>len(fractional_times_copy):
+            logger.warning('in create_fractional_data_from_array_and_object, more fractional objects then times')
+            for time_index, fractional_time in enumerate(fractional_times_copy):
+                
+                # init loop
+                closest_delta_velocity = 1000000
+                best_fractional_index=-1
+                
+                # loop through each time, and for each time choose the closest fractional
+                for fractional_index, fractional in enumerate(fractionals_copy):
+                    calculated_velocity = (fractional['feet']/660)/fractional_time
+                    if abs(calculated_velocity-average_velocity)<closest_delta_velocity:
+                        closest_delta_velocity=abs(calculated_velocity-average_velocity)
+                        best_fractional_index=fractional_index
+                
+                # now that we have the likely fractional index
+                fractional_to_assign=fractionals_copy.pop(best_fractional_index)
+                
+                # assign fractional
+                fractional_data.append({
+                    'point': fractional_to_assign['point'],
+                    'text': fractional_to_assign['text'].upper(),
+                    'distance': fractional_to_assign['feet']/660,
+                    'time': fractional_time
+                })
+        else:
+            logger.warning('in create_fractional_data_from_array_and_object, more fractional times then objects')
+            # more times means map closest time to each fractional
+            for fractional_index, fractional in enumerate(fractionals_copy):
+                
+                # init inner loop
+                closest_delta_velocity = 1000000
+                best_fractional_time_index=-1
+                
+                # loop through each fractional, and for each fractional choose the closest time
+                for time_index, fractional_time in enumerate(fractional_times_copy):
+                    calculated_velocity = (fractional['feet']/660)/fractional_time
+                    if abs(calculated_velocity-average_velocity)<closest_delta_velocity:
+                        closest_delta_velocity=abs(calculated_velocity-average_velocity)
+                        best_fractional_time_index=time_index
+                        
+                # now that we have the likely time index
+                time_to_assign=fractional_times_copy.pop(best_fractional_time_index)
+                
+                # assign fractional
+                fractional_data.append({
+                    'point': fractional['point'],
+                    'text': fractional['text'].upper(),
+                    'distance': fractional['feet']/660,
+                    'time': time_to_assign
+                })
+                
+        # append the final time
+        fractional_data.append({
+            'point': 6,
+            'text': 'FIN',
+            'distance': race_distance,
+            'time': fractional_time
+        })
+        
+        # finished
+        return fractional_data
+    
+def get_position_velocity_array_from_fractions_and_points_of_call(fractions, points_of_call, num_points=5):
+    
+    # get the race distance (everything in meters)
+    race_distance = fractions[-1].distance * METERS_PER_FURLONG
+    
+    # get the array of distances based on num points
+    evaluation_distances = np.linspace(0,race_distance,num_points+1)
+    
+    # points of call data formatting
+    horse_lb_distance=[0]
+    horse_lb=[0]
+    for point_of_call in points_of_call:
+        if point_of_call.distance > 0:
+            horse_lb_distance.append(point_of_call.distance * METERS_PER_FURLONG)
+            horse_lb.append(point_of_call.lengths_back * METERS_PER_LENGTH)
+    
+    # fractional data formatting
+    fractional_distances = [0]
+    fractional_times = [0]
+    for fraction in fractions:
+        fractional_distances.append(fraction.distance * METERS_PER_FURLONG)
+        fractional_times.append(fraction.time)
+        
+    # get horses lengths back from leader at each interval
+    horse_lb_at_distance = np.interp(
+        evaluation_distances,
+        horse_lb_distance,
+        horse_lb
+    )
+    
+    # get leaders position when horse is crossing each interval
+    leader_distance_at_horse_distance = np.array(evaluation_distances) + horse_lb_at_distance
+    
+    # must use a spline to do the extrapolation in case the horse inst the leader
+    # and leader distance is longer than the race distance
+    
+    fractional_distance_time_spline = InterpolatedUnivariateSpline(
+        fractional_distances,
+        fractional_times,
+        k=1 # linear extrapolation
+    )
+    
+    # get leaders time at those positions (which is the horses time at the intervals)
+    horse_times = fractional_distance_time_spline(leader_distance_at_horse_distance)
+
+    # get velocity
+    horse_velocities = (evaluation_distances[1]-evaluation_distances[0]) / np.diff(horse_times)
+
+    return horse_velocities
         
     

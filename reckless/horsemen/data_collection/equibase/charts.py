@@ -7,7 +7,8 @@ from django.core.exceptions import ValidationError
 from fuzzywuzzy import process
 from horsemen.data_collection.utils import SCRAPING_FOLDER, get_best_choice_from_description_code, \
     convert_string_to_furlongs, convert_string_to_seconds, convert_lengths_back_string, \
-    get_point_of_call_object_from_furlongs, get_fractional_time_object_from_furlongs
+    get_point_of_call_object_from_furlongs, get_fractional_time_object_from_furlongs, \
+    create_fractional_data_from_array_and_object
 from horsemen.models import Races, Tracks, Entries, Horses, PointsOfCall, FractionalTimes
 from horsemen.data_collection.scraping import scrape_url_zenrows
 
@@ -24,7 +25,7 @@ def get_equibase_chart_pdfs():
         for entry in race.entries_set.all():
             horse = entry.horse
             for horse_race in Races.objects.filter(
-                    entry__horse=horse,
+                    entry_set__horse=horse,
                     equibase_chart_import=False
                 ).order_by('-race_date'):
                 
@@ -233,7 +234,8 @@ def get_race_info(page):
         if 'FractionalTimes:' in line['text']:
             race_info_table = False # first line after race info table
             pattern = r'\b\d+:\d+\.\d+|\b\d+\.\d+'
-            race_info['fractional_times'] = [convert_string_to_seconds(time_string) for time_string in re.findall(pattern, line['text'])]
+            fractional_time_array = [convert_string_to_seconds(time_string) for time_string in re.findall(pattern, line['text'])]
+            race_info['fractional_times'] = create_fractional_data_from_array_and_object(fractional_time_array, race_info['distance'])
 
         # end past performance
         if 'Trainers:' in line['text']:
@@ -348,6 +350,7 @@ def store_race_info_in_table(race_info):
         race.purse = race_info['purse']
         race.breed = race_info['horse_type']
         race.condition = race_info['condition']
+        race.race_type = race_info['race_type']
     elif not race.drf_results_import:
         race.condition = race_info['condition']
     race.equibase_chart_import = True
@@ -358,25 +361,16 @@ def store_race_info_in_table(race_info):
         return
     
     # fractional times
-    fractional_time_object = get_fractional_time_object_from_furlongs(race.distance)
-    fractional_time_data = race_info.get('fractional_times', [])
-    if fractional_time_object and len(fractional_time_data) == len(fractional_time_object['fractionals']):
-        for index, fractional_time in enumerate(fractional_time_data):
-            FractionalTimes.objects.get_or_create(
-                race=race,
-                point=fractional_time_object['fractionals'][index]['point'],
-                defaults={
-                    'text': fractional_time_object['fractionals'][index].get('text',''),
-                    'distance': fractional_time_object['fractionals'][index].get('feet',0)/660,
-                    'time': fractional_time
-                }
-            )
-    else:
-        if race.distance > 2.5 and race.breed == 'TB':
-            if fractional_time_object and len(fractional_time_data) > 0:
-                logger.error(f'in store_race_info_in_table, the number of ractional times ({len(fractional_time_data)}) are wrong compared to the object ({len(fractional_time_object['fractionals'])}) for race distance of {race.distance*660}!')
-            elif not fractional_time_object:
-                logger.warning(f'no fractional object for race distance of {race.distance}')
+    for fractional_time_data in race_info.get('fractional_times', []):
+        FractionalTimes.objects.get_or_create(
+            race=race,
+            point=fractional_time_data['point'],
+            defaults={
+                'text': fractional_time_data['text'],
+                'distance': fractional_time_data['distance'],
+                'time': fractional_time_data['time']
+            }
+        )
     
     # go through entries
     for entry_data in race_info['entries'].values():

@@ -161,7 +161,7 @@ class EquibaseChartExtractor:
 
             # init data storage
             data = {
-                'text': '',
+                'lines': [],
                 'tables': {}
             }
 
@@ -201,8 +201,14 @@ class EquibaseChartExtractor:
                         # process table row
                         table['data'].append(get_table_values_from_line(table['header_order'], table['header_positions'], line))
                 else:
+
                     #line processing
-                    data['text'] += ' ' + get_text_with_spaces(line)
+                    stripped_line = get_text_with_spaces(line).strip()
+                    pattern = r'(\w+:)|(Footnotes)'
+                    if len(data['lines'])==0 or re.match(pattern, stripped_line):
+                        data['lines'].append(stripped_line)
+                    else:
+                        data['lines'][-1] += ' ' + stripped_line
 
                 # check for table headers
                 if not table:
@@ -228,10 +234,10 @@ class EquibaseChartExtractor:
             self.data.append(data)
 
             # log
-            logger.info(f'parsed {len(data['tables'])} tables and a line of length {len(data['text'])}')
+            logger.info(f'parsed {len(data['tables'])} tables and {len(data['lines'])} lines')
 
 # main extraction sub
-def parse_equibase_chart(filename):
+def parse_equibase_chart(filename, debug=False):
 
     # logging
     logger.info(f'parse_equibase_charts called for {filename}')
@@ -242,7 +248,11 @@ def parse_equibase_chart(filename):
     # parse data
     extractor.parse()
 
-    # output json
+    # if debug, output json
+    if debug:
+        extractor.to_json()
+
+    # return extracted data
     return extractor.data
 
 

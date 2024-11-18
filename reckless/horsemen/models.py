@@ -205,6 +205,11 @@ class Races(models.Model):
     # EQB chart
     equibase_chart_import = models.BooleanField(default=False)
     race_type = models.CharField(max_length=5, null=True, choices=EQUIBASE_RACE_TYPE_CHOICES)
+    race_name = models.CharField(max_length=255, null=True)
+    grade = models.IntegerField(null=True)
+    record_horse_name = models.CharField(max_length=255, null=True)
+    record_time = models.FloatField(null=True)
+    record_date = models.DateField(null=True)
 
     def clean(self):
         
@@ -675,3 +680,14 @@ class FractionalTimes(models.Model):
     text = models.CharField(max_length=255)
     distance = models.FloatField()
     time = models.FloatField()
+
+class SplitCallVelocities(models.Model):
+    race = models.ForeignKey(Races, on_delete=models.CASCADE)
+    point = models.IntegerField()
+    start_distance = models.FloatField()
+    end_distance = models.FloatField()
+    split_time = models.FloatField()
+    total_time = models.FloatField()
+    velocity = models.FloatField()
+    lengths_back = models.FloatField()
+

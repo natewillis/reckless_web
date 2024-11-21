@@ -1,9 +1,55 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
+import requests
+from django.db.models import Q
+from horsemen.models import Races, Tracks
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+def get_entries_data():
+    """
+    Get entries data for races in the next 3 days that haven't been imported
+    or any races happening today regardless of import status
+    """
+    logger.info('running get_entries_data')
+
+    # Get current date
+    today = datetime.now(pytz.UTC).date()
+    three_days_future = today + timedelta(days=3)
+
+    # Query races that match our criteria
+    races = Races.objects.filter(
+        Q(race_date__gte=today, race_date__lte=three_days_future, drf_entries_import=False) |  # Next 3 days without import
+        Q(race_date=today)  # Today's races regardless of import status
+    ).select_related('track')
+
+    # Get unique track and date combinations
+    track_date_combos = set((race.track, race.race_date) for race in races)
+
+    # Process each track/date combination
+    parsed_entries_data = []
+    for track, race_date in track_date_combos:
+        # Get entries URL for this track and date
+        url = track.get_drf_entries_url_for_date(race_date)
+        
+        try:
+            # Fetch data from URL
+            response = requests.get(url)
+            if response.status_code == 200:
+                # Parse the JSON response
+                data = response.json()
+                # Parse the extracted data
+                parsed_data = parse_extracted_entries_data(data)
+                parsed_entries_data.extend(parsed_data)
+                logger.info(f'Successfully fetched and parsed entries data for {track.name} on {race_date}')
+            else:
+                logger.error(f'Failed to fetch entries data from URL {url}. Status code: {response.status_code}')
+        except Exception as e:
+            logger.error(f'Error fetching entries data for {track.name} on {race_date}: {str(e)}')
+
+    return parsed_entries_data
 
 def parse_extracted_entries_data(extracted_entries_data):
     """

@@ -4,7 +4,9 @@ from horsemen.data_collection.equibase.entries import parse_equibase_entry_url, 
 from horsemen.data_collection.equibase.horse_results import parse_equibase_horse_results_history, get_horse_results_files
 from horsemen.data_collection.equibase.charts.extractor import parse_equibase_chart
 from horsemen.data_collection.equibase.charts.data_parser import parse_extracted_chart_data
-from horsemen.data_collection.drf.tracks.data_parser import fetch_tracks_data, parse_extracted_tracks_data
+from horsemen.data_collection.drf.tracks.data_parser import fetch_tracks_data
+from horsemen.data_collection.drf.entries.data_parser import get_entries_data
+from horsemen.data_collection.drf.results.data_parser import get_results_data
 
 # init logging
 logger = logging.getLogger(__name__)
@@ -48,8 +50,16 @@ def parse_equibase_files():
 def drf_run():
 
     # run tracks
-    tracks_json = fetch_tracks_data()
-    print(parse_extracted_tracks_data(tracks_json))
+    objects_to_load = fetch_tracks_data()
+    print(objects_to_load) # would load here if we were done with loader
+
+    # get entries
+    objects_to_load = get_entries_data()
+    print(objects_to_load) # would load here if we were done with loader
+
+    # get results
+    objects_to_load = get_results_data()
+    print(objects_to_load) # would load here if we were done with loader
 
 def single_run():
 

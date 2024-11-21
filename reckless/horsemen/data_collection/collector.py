@@ -37,7 +37,7 @@ def parse_equibase_files():
             file_path.rename(processed_folder / file_path.name)
 
         if 'CHART' in file_path.name and '.pdf' in file_path.name:
-            extracted_chart_data = parse_equibase_chart(file_path)
+            extracted_chart_data = parse_equibase_chart(file_path, True)
             parsed_chart_data = parse_extracted_chart_data(extracted_chart_data)
 
             #try:

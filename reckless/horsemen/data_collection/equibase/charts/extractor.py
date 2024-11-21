@@ -33,7 +33,7 @@ def get_header_info(line):
     for char in header_chars:
 
         # seems to be the spacing between columns
-        if char['x0'] - last_x1 > 4:
+        if char['x0'] - last_x1 > 4 or label == 'WGT':
 
             # store data
             header_positions[label] = start_x0
@@ -200,15 +200,6 @@ class EquibaseChartExtractor:
                     else:
                         # process table row
                         table['data'].append(get_table_values_from_line(table['header_order'], table['header_positions'], line))
-                else:
-
-                    #line processing
-                    stripped_line = get_text_with_spaces(line).strip()
-                    pattern = r'(\w+:)|(Footnotes)'
-                    if len(data['lines'])==0 or re.match(pattern, stripped_line):
-                        data['lines'].append(stripped_line)
-                    else:
-                        data['lines'][-1] += ' ' + stripped_line
 
                 # check for table headers
                 if not table:
@@ -230,6 +221,18 @@ class EquibaseChartExtractor:
 
                             # dont search anymore
                             break
+
+                # after all the table stuff, if were not dealing with it append the line
+                if not table:
+                    #line processing
+                    stripped_line = get_text_with_spaces(line).strip()
+                    pattern = r'([\w\s]+:)|(Footnotes)'
+                    if len(data['lines'])==0 or re.match(pattern, stripped_line):
+                        print(f'new line {stripped_line}')
+                        data['lines'].append(stripped_line)
+                    else:
+                        data['lines'][-1] += ' ' + stripped_line
+
             # append to data
             self.data.append(data)
 

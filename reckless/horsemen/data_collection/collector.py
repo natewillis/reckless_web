@@ -1,10 +1,10 @@
 import logging
-from horsemen.data_collection.drf.tracks import get_drf_tracks
 from horsemen.data_collection.utils import SCRAPING_FOLDER
 from horsemen.data_collection.equibase.entries import parse_equibase_entry_url, get_equibase_entries_files
 from horsemen.data_collection.equibase.horse_results import parse_equibase_horse_results_history, get_horse_results_files
 from horsemen.data_collection.equibase.charts.extractor import parse_equibase_chart
 from horsemen.data_collection.equibase.charts.data_parser import parse_extracted_chart_data
+from horsemen.data_collection.drf.tracks.data_parser import fetch_tracks_data, parse_extracted_tracks_data
 
 # init logging
 logger = logging.getLogger(__name__)
@@ -45,11 +45,16 @@ def parse_equibase_files():
             #except PermissionError as p:
             #    logger.error(f'couldnt delete {file_path.name} due to permission error {p}')
 
+def drf_run():
+
+    # run tracks
+    tracks_json = fetch_tracks_data()
+    print(parse_extracted_tracks_data(tracks_json))
 
 def single_run():
 
     # get the tracks results and entries from drf
-    get_drf_tracks()
+    #get_drf_tracks()
 
     # get entries files
     get_equibase_entries_files()

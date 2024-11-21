@@ -15,7 +15,9 @@ def fetch_tracks_data():
     response = requests.get(url)
 
     if response.status_code == 200:
-        parse_extracted_tracks_data(response.json())
+        return response.json()
+    else:
+        return {}
 
 
 

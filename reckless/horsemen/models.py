@@ -2,7 +2,10 @@ from django.db import models
 import pytz
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
-from horsemen.constants import BREED_CHOICES, DAY_EVENING_CHOICES, EQUIBASE_RACE_TYPE_CHOICES, DRF_AGE_RESTRICTION_CHOICES, DRF_SEX_RESTRICTION_CHOICES, RACE_SURFACE
+from horsemen.constants import BREED_CHOICES, DAY_EVENING_CHOICES, \
+    EQUIBASE_RACE_TYPE_CHOICES, DRF_AGE_RESTRICTION_CHOICES, \
+        DRF_SEX_RESTRICTION_CHOICES, RACE_SURFACE, SCRATCH_REASON_CHOICES, \
+        BET_CHOICES
 
 class Tracks(models.Model):
 
@@ -319,18 +322,7 @@ class Trainers(models.Model):
 
 class Entries(models.Model):
 
-    SCRATCH_REASON_CHOICES = [
-        ('N', 'Not Scratched'),
-        ('A', 'Also-Eligible'),
-        ('E', 'Early'),
-        ('G', 'Gate'),
-        ('M', 'Main-Track-Only'),
-        ('O', 'Off-Turf'),
-        ('S', 'Stewards'),
-        ('T', 'Trainer'),
-        ('V', 'Veterinarian'),
-        ('U', 'Unknown')
-    ]
+
 
     # common data
     race = models.ForeignKey(Races, on_delete=models.CASCADE)
@@ -423,10 +415,7 @@ class Entries(models.Model):
 
 class Workouts(models.Model):
 
-    RACE_SURFACE = [
-        ('D', 'Dirt'),
-        ('T', 'Turf')
-    ]
+
 
     horse = models.ForeignKey(Horses, on_delete=models.CASCADE)
     workout_date = models.DateField()
@@ -472,45 +461,7 @@ class Workouts(models.Model):
 
 class Payoffs(models.Model):
 
-    BET_CHOICES = [
-        ("0", "Choose 6"),
-        ("C", "Classix"),
-        ("Z", "Consolation Double"),
-        ("M", "Consolation Pick 3"),
-        ("8", "Countdown"),
-        ("D", "Daily Double"),
-        ("E", "Exacta"),
-        ("J", "Exactor"),
-        ("N", "Future Wager"),
-        ("X", "Grand Slam"),
-        ("H", "Head2Head"),
-        ("P", "Jockey Challenge"),
-        ("V", "Odd or Even"),
-        ("O", "Omni"),
-        ("F", "Perfecta"),
-        ("G", "Perfector"),
-        ("I", "Pick 10"),
-        ("3", "Pick 3"),
-        ("4", "Pick 4"),
-        ("5", "Pick 5"),
-        ("6", "Pick 6"),
-        ("7", "Pick 7"),
-        ("9", "Pick 9"),
-        ("L", "Place Pick All"),
-        ("Q", "Quinella"),
-        ("1", "Roulette"),
-        ("Y", "Super Bet"),
-        ("B", "Super Tri"),
-        ("S", "Superfecta"),
-        ("U", "Tri Super"),
-        ("A", "Triactor"),
-        ("T", "Trifecta"),
-        ("R", "Triple"),
-        ("W", "Twin Trifecta"),
-        ("2", "Two in the Money"),
-        ("K", "Win Four"),
-        ("HJ", "Super High Five Jackpot")
-    ]
+    
 
     race = models.ForeignKey('Races', on_delete=models.CASCADE)
     wager_type = models.CharField(max_length=2, choices=BET_CHOICES)

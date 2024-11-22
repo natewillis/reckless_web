@@ -17,6 +17,59 @@ RACE_SURFACE = [
     ('T', 'Turf')
 ]
 
+BET_CHOICES = [
+  ("0", "Choose 6"),
+  ("C", "Classix"),
+  ("Z", "Consolation Double"),
+  ("M", "Consolation Pick 3"),
+  ("8", "Countdown"),
+  ("D", "Daily Double"),
+  ("E", "Exacta"),
+  ("J", "Exactor"),
+  ("N", "Future Wager"),
+  ("X", "Grand Slam"),
+  ("H", "Head2Head"),
+  ("P", "Jockey Challenge"),
+  ("V", "Odd or Even"),
+  ("O", "Omni"),
+  ("F", "Perfecta"),
+  ("G", "Perfector"),
+  ("I", "Pick 10"),
+  ("3", "Pick 3"),
+  ("4", "Pick 4"),
+  ("5", "Pick 5"),
+  ("6", "Pick 6"),
+  ("7", "Pick 7"),
+  ("9", "Pick 9"),
+  ("L", "Place Pick All"),
+  ("Q", "Quinella"),
+  ("1", "Roulette"),
+  ("Y", "Super Bet"),
+  ("B", "Super Tri"),
+  ("S", "Superfecta"),
+  ("U", "Tri Super"),
+  ("A", "Triactor"),
+  ("T", "Trifecta"),
+  ("R", "Triple"),
+  ("W", "Twin Trifecta"),
+  ("2", "Two in the Money"),
+  ("K", "Win Four"),
+  ("HJ", "Super High Five Jackpot")
+]
+
+SCRATCH_REASON_CHOICES = [
+  ('N', 'Not Scratched'),
+  ('A', 'Also-Eligible'),
+  ('E', 'Early'),
+  ('G', 'Gate'),
+  ('M', 'Main-Track-Only'),
+  ('O', 'Off-Turf'),
+  ('S', 'Stewards'),
+  ('T', 'Trainer'),
+  ('V', 'Veterinarian'),
+  ('U', 'Unknown')
+]
+
 EQUIBASE_RACE_TYPE_CHOICES = [
     ('ALW', 'Allowance race'),
     ('AOC', 'Allowance/Optional Claiming'),
@@ -94,6 +147,11 @@ EQUIBASE_RACE_TYPE_CHOICES = [
 DAY_EVENING_CHOICES = [
     ('D', 'Day'),
     ('E', 'Evening')
+]
+
+RACE_SURFACE = [
+    ('D', 'Dirt'),
+    ('T', 'Turf')
 ]
 
 DRF_AGE_RESTRICTION_CHOICES = [

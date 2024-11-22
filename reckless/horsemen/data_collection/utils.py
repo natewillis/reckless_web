@@ -332,6 +332,7 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
         # the only thing we know for sure in this case is that the final time is
         # a the race distance
         fractional_data.append({
+            'object_type': 'fractional_time',
             'point': 6,
             'text': 'FIN',
             'distance': race_distance,
@@ -344,6 +345,7 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
         for index, fractional_time in enumerate(fractional_times):
             fractional = fractional_object['fractionals'][index]
             fractional_data.append({
+                'object_type': 'fractional_time',
                 'point': fractional['point'],
                 'text': 'FIN' if index+1 == len(fractional_times) else fractional['text'].upper(),
                 'distance': race_distance if index+1 == len(fractional_times) else fractional['feet']/660,
@@ -379,6 +381,7 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
                 
                 # assign fractional
                 fractional_data.append({
+                    'object_type': 'fractional_time',
                     'point': fractional_to_assign['point'],
                     'text': fractional_to_assign['text'].upper(),
                     'distance': fractional_to_assign['feet']/660,
@@ -405,6 +408,7 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
                 
                 # assign fractional
                 fractional_data.append({
+                    'object_type': 'fractional_time',
                     'point': fractional['point'],
                     'text': fractional['text'].upper(),
                     'distance': fractional['feet']/660,
@@ -413,6 +417,7 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
                 
         # append the final time
         fractional_data.append({
+            'object_type': 'fractional_time',
             'point': 6,
             'text': 'FIN',
             'distance': race_distance,

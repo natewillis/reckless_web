@@ -6,14 +6,18 @@ Handles parsing of tracks, races, horses, entries, and related data.
 import logging
 from typing import Optional, Dict, Any, List, Union
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.db.models import Q
 from horsemen.data_collection.utils import (
     create_fractional_data_from_array_and_object,
-    get_point_of_call_object_from_furlongs
+    get_point_of_call_object_from_furlongs,
+    get_post_time_from_drf
 )
 from horsemen.models import (
     FractionalTimes, Races, Horses, Tracks, Trainers,
-    Jockeys, PointsOfCall, Payoffs, Entries
+    Jockeys, PointsOfCall, Payoffs, Entries, Workouts
 )
+from horsemen.constants import FURLONGS_PER_FEET
+from fuzzywuzzy import process
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -38,14 +42,28 @@ def parse_track(track_data: Dict[str, Any]) -> Tracks:
         track = None
         if 'code' in track_data:
             track = Tracks.objects.filter(code=track_data['code']).first()
-        if not track and 'track_name' in track_data:
-            track = Tracks.objects.filter(name=track_data['track_name']).first()
+        if not track and 'name' in track_data:
+            track = Tracks.objects.filter(name=track_data['name']).first()
+
+            if not track:
+                # use a fuzzy search on track names
+
+                # Retrieve all track names from the database
+                track_names = list(Tracks.objects.values_list('name', flat=True))
+
+                # Use fuzzywuzzy to find the closest match
+                closest_match, match_score = process.extractOne(track_data['name'], track_names)
+                
+                # Check if the match score meets the threshold
+                if match_score >= 80:
+                    track = Tracks.objects.filter(name=closest_match).first()
+                else:
+                    logger.error(f'in store_race_info_in_table, {track_data['name']} doesnt match existing tracks with fuzzywuzzy')
 
         if track:
-            logger.info("Found track: %s", track)
             return track
-
-        raise ValueError(f'No matching track found for data: {track_data}')
+        else:
+            raise ValueError(f'No matching track found for data: {track_data}')
 
     except Exception as e:
         logger.error("Error parsing track: %s", e)
@@ -102,7 +120,12 @@ def parse_race(race_data: Dict[str, Any]) -> Races:
             'race_type', 'race_name', 'grade',
             'record_horse_name', 'record_time', 'record_date'
         ]
+
+        # non-standard processing
+        if 'post_time_string' in race_data:
+            race_data['post_time'] = get_post_time_from_drf(race.track, race.race_date, race_data['post_time_string'])
         
+        # standard processing
         for field in update_fields:
             if field in race_data:
                 current_value = getattr(race, field)
@@ -177,10 +200,11 @@ def parse_horse(horse_data: Dict[str, Any], existing_instance: Optional[Horses] 
         changed = False
         for key, value in horse_data.items():
             if key not in ['object_type', 'children'] and hasattr(horse, key):
-                if getattr(horse, key) != value:
+                old_value = getattr(horse, key)
+                if old_value != value:
                     setattr(horse, key, value)
                     changed = True
-                    logger.debug("Updated '%s' for horse: %s", key, horse)
+                    logger.debug(f"Updated '%s' for horse from %s to %s: %s", key, old_value, value, horse)
         
         if changed:
             horse.save()
@@ -211,9 +235,8 @@ def parse_trainer(trainer_data: Dict[str, Any], existing_instance: Optional[Trai
         trainer = None
         
         # Check existing instance
-        if existing_instance and all(field in trainer_data for field in ['first_name', 'last_name']):
-            if (trainer_data['first_name'] == existing_instance.first_name and 
-                trainer_data['last_name'] == existing_instance.last_name):
+        if existing_instance and 'last_name' in trainer_data:
+            if trainer_data['last_name'] == existing_instance.last_name:
                 trainer = existing_instance
         
         # Try identifiers in order of preference
@@ -221,7 +244,8 @@ def parse_trainer(trainer_data: Dict[str, Any], existing_instance: Optional[Trai
             identifiers = [
                 ('drf_trainer_id', 'drf_trainer_id'),
                 ('equibase_trainer_id', 'equibase_trainer_id'),
-                (['first_name', 'last_name'], lambda d: {'first_name': d['first_name'], 'last_name': d['last_name']})
+                (['first_name', 'last_name'], lambda d: {'first_name': d['first_name'], 'last_name': d['last_name']}),
+                (['first_initials', 'last_name'], lambda d: {'first_initials': d['first_initials'], 'last_name': d['last_name']}),
             ]
             for fields, lookup in identifiers:
                 if not trainer:
@@ -230,18 +254,34 @@ def parse_trainer(trainer_data: Dict[str, Any], existing_instance: Optional[Trai
                             trainer = Trainers.objects.filter(**lookup(trainer_data)).first()
                     elif fields in trainer_data:
                         trainer = Trainers.objects.filter(**{fields: trainer_data[fields]}).first()
+        
+        # custom first initial search
+        if not trainer and 'last_name' in trainer_data and 'first_initials' in trainer_data:
+            trainer = Trainers.objects.filter(
+                Q(last_name=trainer_data['last_name']) & Q(first_name__startswith=trainer_data['first_initials'][0])
+            )
+        if not trainer and 'last_name' in trainer_data and 'first_name' in trainer_data:
+            trainer = Trainers.objects.filter(
+                Q(last_name=trainer_data['last_name']) & Q(first_initials__startswith=trainer_data['first_name'][0])
+            )
 
         # Create new trainer if needed
         if not trainer:
-            required_fields = ['first_name', 'last_name']
-            if not all(field in trainer_data for field in required_fields):
-                raise ValueError("first_name and last_name are required")
+            if 'last_name' not in trainer_data or ('first_name' not in trainer_data and 'first_initials' not in trainer_data):
+                raise ValueError("first_name or first_initials and last_name are required")
 
-            trainer = Trainers.objects.create(
-                first_name=trainer_data['first_name'],
-                last_name=trainer_data['last_name'],
-                alias=trainer_data.get('alias', '')
-            )
+            if 'first_name' in trainer_data:
+                trainer = Trainers.objects.create(
+                    first_name=trainer_data['first_name'],
+                    last_name=trainer_data['last_name'],
+                    alias=trainer_data.get('alias', '')
+                )
+            else:
+                trainer = Trainers.objects.create(
+                    first_initials=trainer_data['first_initials'],
+                    last_name=trainer_data['last_name'],
+                    alias=trainer_data.get('alias', '')
+                )
             logger.info("Created new trainer: %s", trainer)
         else:
             logger.info("Found existing trainer: %s", trainer)
@@ -284,9 +324,8 @@ def parse_jockey(jockey_data: Dict[str, Any], existing_instance: Optional[Jockey
         jockey = None
         
         # Check existing instance
-        if existing_instance and all(field in jockey_data for field in ['first_name', 'last_name']):
-            if (jockey_data['first_name'] == existing_instance.first_name and 
-                jockey_data['last_name'] == existing_instance.last_name):
+        if existing_instance and 'last_name' in jockey_data:
+            if jockey_data['last_name'] == existing_instance.last_name:
                 jockey = existing_instance
         
         # Try identifiers in order of preference
@@ -294,7 +333,8 @@ def parse_jockey(jockey_data: Dict[str, Any], existing_instance: Optional[Jockey
             identifiers = [
                 ('drf_jockey_id', 'drf_jockey_id'),
                 ('equibase_jockey_id', 'equibase_jockey_id'),
-                (['first_name', 'last_name'], lambda d: {'first_name': d['first_name'], 'last_name': d['last_name']})
+                (['first_name', 'last_name'], lambda d: {'first_name': d['first_name'], 'last_name': d['last_name']}),
+                (['first_initials', 'last_name'], lambda d: {'first_initials': d['first_initials'], 'last_name': d['last_name']}),
             ]
             for fields, lookup in identifiers:
                 if not jockey:
@@ -304,16 +344,31 @@ def parse_jockey(jockey_data: Dict[str, Any], existing_instance: Optional[Jockey
                     elif fields in jockey_data:
                         jockey = Jockeys.objects.filter(**{fields: jockey_data[fields]}).first()
 
+        # custom first initial search
+        if not jockey and 'last_name' in jockey_data and 'first_initials' in jockey_data:
+            jockey = Jockeys.objects.filter(
+                Q(last_name=jockey_data['last_name']) & Q(first_name__startswith=jockey_data['first_initials'][0])
+            ).first()
+        if not jockey and 'last_name' in jockey_data and 'first_name' in jockey_data:
+            jockey = Jockeys.objects.filter(
+                Q(last_name=jockey_data['last_name']) & Q(first_initials__startswith=jockey_data['first_name'][0])
+            ).first()
+
         # Create new jockey if needed
         if not jockey:
-            required_fields = ['first_name', 'last_name']
-            if not all(field in jockey_data for field in required_fields):
-                raise ValueError("first_name and last_name are required")
+            if 'last_name' not in jockey_data or ('first_name' not in jockey_data and 'first_initials' not in jockey_data):
+                raise ValueError("first_name or first_initials and last_name are required")
 
-            jockey = Jockeys.objects.create(
-                first_name=jockey_data['first_name'],
-                last_name=jockey_data['last_name']
-            )
+            if 'first_name' in jockey_data:
+                jockey = Jockeys.objects.create(
+                    first_name=jockey_data['first_name'],
+                    last_name=jockey_data['last_name']
+                )
+            else:
+                jockey = Jockeys.objects.create(
+                    first_initials=jockey_data['first_initials'],
+                    last_name=jockey_data['last_name']
+                )
             logger.info("Created new jockey: %s", jockey)
         else:
             logger.info("Found existing jockey: %s", jockey)
@@ -360,7 +415,7 @@ def parse_entry(entry_data: Dict[str, Any], parent_object: Optional[Races] = Non
 
         # Find existing entry
         entry = None
-        if 'program_number' in entry_data:
+        if 'program_number' in entry_data and entry_data['program_number'] != '':
             entry = Entries.objects.filter(
                 race=race,
                 program_number=entry_data['program_number']
@@ -381,19 +436,30 @@ def parse_entry(entry_data: Dict[str, Any], parent_object: Optional[Races] = Non
 
         # Create new entry if needed
         if not entry and 'horse' in entry_data:
-            horse = parse_horse(entry_data['horse'])
-            if horse:
+
+            # search for horse by name inside race first
+            horse = None
+            if 'horse_name' in entry_data['horse']:
+                for race_entry in race.entries_set.all():
+                    if race_entry.horse.horse_name == entry_data['horse']['horse_name']:
+                        horse = race_entry.horse
+                        entry = race_entry
+                        break
+
+            # actually search for horse
+            horse = horse or parse_horse(entry_data['horse'])
+            if horse and not entry:
                 entry, created = Entries.objects.get_or_create(
                     race=race,
                     horse=horse
                 )
                 if created:
                     logger.info("Created new entry: %s", entry)
-            else:
+            elif not horse:
                 raise ValueError("Could not parse horse data")
 
         if not entry:
-            raise ValueError("No matching entry found or could be created")
+            raise ValueError("No matching entry found or could be created: %s", entry_data)
 
         # Update entry attributes
         changed = False
@@ -472,7 +538,7 @@ def parse_payoff(payoff_data: Dict[str, Any], parent_object: Optional[Races] = N
         # Update attributes
         changed = False
         for key, value in payoff_data.items():
-            if key not in ['object_type', 'children'] and hasattr(payoff, key):
+            if key not in ['object_type', 'children', 'race'] and hasattr(payoff, key):
                 if getattr(payoff, key) != value:
                     setattr(payoff, key, value)
                     changed = True
@@ -529,20 +595,22 @@ def parse_fractional_time(
             raise ValueError("point is required")
 
         # Get or create fractional time
-        fractional_time, created = FractionalTimes.objects.get_or_create(
+        fractional_time = FractionalTimes.objects.filter(
             race=race,
             point=fractional_time_data['point']
-        )
+        ).first()
 
-        if created:
-            logger.info("Created new fractional time: %s", fractional_time)
-        else:
+        if fractional_time:
             logger.info("Found existing fractional time: %s", fractional_time)
+        else:
+            fractional_time = FractionalTimes()
+            fractional_time.race = race
+            fractional_time.point = fractional_time_data['point']
 
         # Update attributes
         changed = False
         for key, value in fractional_time_data.items():
-            if key not in ['object_type', 'children'] and hasattr(fractional_time, key):
+            if key not in ['object_type', 'children', 'race'] and hasattr(fractional_time, key):
                 if getattr(fractional_time, key) != value:
                     setattr(fractional_time, key, value)
                     changed = True
@@ -580,39 +648,73 @@ def parse_point_of_call(point_of_call_data: Dict[str, Any], parent_object: Optio
             raise ValueError(f"Parent entry is required: {point_of_call_data}")
 
         # Get point of call object based on distance if available
-        if 'distance' in point_of_call_data:
-            point_of_call_object = get_point_of_call_object_from_furlongs(
-                point_of_call_data['distance'],
-                quarter_horse_flag=entry.race.breed == 'QH'
-            )
-            if point_of_call_object:
-                point_of_call_data['point'] = point_of_call_object['point']
-                point_of_call_data['text'] = point_of_call_object['text']
-
-        # Validate required fields
-        if 'point' not in point_of_call_data:
-            raise ValueError("point is required")
-
-        # Get or create point of call
-        point_of_call, created = PointsOfCall.objects.get_or_create(
-            entry=entry,
-            point=point_of_call_data['point']
+        point_of_call_object = get_point_of_call_object_from_furlongs(
+            entry.race.distance,
+            quarter_horse_flag=entry.race.breed == 'QH'
         )
 
-        if created:
-            logger.info("Created new point of call: %s", point_of_call)
-        else:
+        # Validate required fields
+        if not point_of_call_object:
+            raise ValueError(f"No point of call object found for {entry.race.distance} furlong race: {point_of_call_data}")
+        
+        # Map point to point of call
+        if point_of_call_data['line_index'] > len(point_of_call_object['calls'])-1:
+            raise ValueError(f"Bad point of call line index: {point_of_call_data}")
+        call = point_of_call_object['calls'][point_of_call_data['line_index']]
+
+        # Get or create point of call
+        point_of_call = PointsOfCall.objects.filter(
+            entry=entry,
+            point=call['point']
+        ).first()
+        if point_of_call:
             logger.info("Found existing point of call: %s", point_of_call)
+        else:
+            point_of_call = PointsOfCall()
+            point_of_call.entry = entry
+            point_of_call.point = call['point']
 
         # Update attributes
         changed = False
         for key, value in point_of_call_data.items():
-            if key not in ['object_type', 'children'] and hasattr(point_of_call, key):
+            if key not in ['object_type', 'children', 'entry'] and hasattr(point_of_call, key):
                 if getattr(point_of_call, key) != value:
                     setattr(point_of_call, key, value)
                     changed = True
                     logger.debug("Updated '%s' for point of call: %s", key, point_of_call)
-        
+
+        if point_of_call.text == "FIN" and point_of_call.position == 1:
+            if point_of_call.lengths_back != 0:
+                changed = True
+                point_of_call.lengths_back = 0
+
+        # handle call ditance
+        if 'feet' in call:
+            if call['text'] == 'Fin':
+                furlong_value = entry.race.distance
+            else:
+                furlong_value = value * FURLONGS_PER_FEET
+            if point_of_call.distance is not None:
+                if point_of_call.distance != furlong_value:
+                    point_of_call.distance = furlong_value
+                    logger.debug("Updated '%s' for point of call: %s", 'distance', point_of_call)
+                    changed = True
+            else:
+                point_of_call.distance = furlong_value
+                logger.debug("Updated '%s' for point of call: %s", 'distance', point_of_call)
+                changed = True
+        else: 
+            # handle points of call with no distance in them
+            if point_of_call.distance is not None:
+                if point_of_call.distance != 0:
+                    point_of_call.distance = 0
+                    logger.debug("Updated '%s' for point of call: %s", 'distance', point_of_call)
+                    changed = True
+            else:
+                point_of_call.distance = 0
+                logger.debug("Updated '%s' for point of call: %s", 'distance', point_of_call)
+                changed = True
+
         if changed:
             point_of_call.save()
             
@@ -621,6 +723,94 @@ def parse_point_of_call(point_of_call_data: Dict[str, Any], parent_object: Optio
     except Exception as e:
         logger.error("Error parsing point of call: %s", e)
         raise
+
+def parse_workout(workout_data: Dict[str, Any], parent_object: Optional[Horses] = None) -> Optional[Workouts]:
+    """
+    Parse workout data and return corresponding Workouts model instance.
+    
+    Args:
+        workout_data: Dictionary containing workout information
+        parent_object: Optional parent horse instance
+        
+    Returns:
+        Workouts: The found or created workout instance
+        
+    Raises:
+        ValueError: If required fields are missing or horse cannot be found
+    """
+    logger.debug("Attempting to parse workout data: %s", workout_data)
+
+    try:
+        # Get or validate parent horse
+        horse = parent_object or parse_horse(workout_data['horse'])
+        if not horse:
+            raise ValueError("Parent horse is required")
+
+        # Get track
+        if 'track' not in workout_data:
+            raise ValueError("Track data is required")
+        track = parse_track(workout_data['track'])
+        
+        if not track:
+            raise ValueError("Could not find or create track")
+
+        # Validate required fields
+        required_fields = [
+            'workout_date', 'surface', 'distance',
+            'time_seconds', 'note', 'workout_rank', 'workout_total'
+        ]
+        
+        for field in required_fields:
+            if field not in workout_data:
+                raise ValueError(f"Required field missing: {field}")
+
+        # Get or create workout
+        workout, created = Workouts.objects.get_or_create(
+            track=track,
+            workout_date=workout_data['workout_date'],
+            horse=horse,
+            defaults={
+                'surface': workout_data['surface'],
+                'distance': workout_data['distance'],
+                'time_seconds': workout_data['time_seconds'],
+                'note': workout_data['note'],
+                'workout_rank': workout_data['workout_rank'],
+                'workout_total': workout_data['workout_total']
+            }
+        )
+
+        if created:
+            logger.info("Created new workout: %s", workout)
+        else:
+            # Update fields if changed
+            changed = False
+            update_fields = [
+                'surface', 'distance', 'time_seconds',
+                'note', 'workout_rank', 'workout_total'
+            ]
+            
+            for field in update_fields:
+                if field in workout_data:
+                    current_value = getattr(workout, field)
+                    new_value = workout_data[field]
+                    if current_value != new_value:
+                        setattr(workout, field, new_value)
+                        changed = True
+                        logger.debug("Updated field '%s' from '%s' to '%s'", 
+                                   field, current_value, new_value)
+            
+            if changed:
+                workout.save()
+                logger.info("Updated workout: %s", workout)
+
+        return workout
+
+    except ValidationError as e:
+        logger.error("Validation error parsing workout: %s", e)
+        return None
+    except Exception as e:
+        logger.error("Error parsing workout: %s", e)
+        return None
 
 def process_parsed_objects(parsed_objects: List[Dict[str, Any]]) -> None:
     """
@@ -642,7 +832,7 @@ def process_parsed_objects(parsed_objects: List[Dict[str, Any]]) -> None:
             if parsed_object['object_type'] in OBJECT_MAP:
                 OBJECT_MAP[parsed_object['object_type']](parsed_object)
             else:
-                raise ValueError(f"Unsupported object type: {parsed_object['object_type']}")
+                raise ValueError(f"Unsupported object type: {parsed_object['object_type']}: {parsed_object}")
 
     except Exception as e:
         logger.error("Error processing parsed objects: %s", e)
@@ -658,5 +848,6 @@ OBJECT_MAP = {
     'fractional_time': parse_fractional_time,
     'payoff': parse_payoff,
     'trainer': parse_trainer,
-    'jockey': parse_jockey
+    'jockey': parse_jockey, 
+    'workout': parse_workout
 }

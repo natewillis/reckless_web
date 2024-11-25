@@ -8,13 +8,24 @@ from horsemen.constants import BREED_CHOICES, DAY_EVENING_CHOICES, \
         BET_CHOICES
 
 class Tracks(models.Model):
-
     TIMEZONES = tuple(zip(pytz.all_timezones, pytz.all_timezones))
 
     code = models.CharField(max_length=255, unique=True)
     name = models.CharField(max_length=255)
     time_zone = models.CharField(max_length=32, choices=TIMEZONES, default='UTC')
     country = models.CharField(max_length=3)
+    
+    def clean(self):
+        if self.time_zone and self.time_zone not in dict(self.TIMEZONES):
+            raise ValidationError(
+                _("Invalid timezone: %(value)s"),
+                params={'value': self.time_zone},
+                code='invalid_choice'
+            )
+    
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
     
     def get_drf_results_url_for_date(self, race_date):
         return f'https://www.drf.com/results/resultDetails/id/{self.code}/country/{self.country}/date/{race_date.strftime('%m-%d-%Y')}'
@@ -24,10 +35,8 @@ class Tracks(models.Model):
     
     def get_equibase_chart_url_for_date(self, race_date):
         return f'https://www.equibase.com/premium/eqbPDFChartPlus.cfm?RACE=A&BorP=P&TID={self.code}&CTRY={self.country}&DT={race_date.strftime('%m/%d/%Y')}&DAY=D&STYLE=EQB'
-        
 
 class Races(models.Model):
-
     # Common
     track = models.ForeignKey(Tracks, on_delete=models.CASCADE)
     race_date = models.DateField()
@@ -69,12 +78,54 @@ class Races(models.Model):
     record_date = models.DateField(null=True)
 
     def clean(self):
+        # Choice Field Validation
+        if self.day_evening and self.day_evening not in dict(DAY_EVENING_CHOICES):
+            raise ValidationError(
+                _("Invalid day/evening choice: %(value)s"),
+                params={'value': self.day_evening},
+                code='invalid_choice'
+            )
+        
+        if self.age_restriction and self.age_restriction not in dict(DRF_AGE_RESTRICTION_CHOICES):
+            raise ValidationError(
+                _("Invalid age restriction: %(value)s"),
+                params={'value': self.age_restriction},
+                code='invalid_choice'
+            )
+            
+        if self.sex_restriction and self.sex_restriction not in dict(DRF_SEX_RESTRICTION_CHOICES):
+            raise ValidationError(
+                _("Invalid sex restriction: %(value)s"),
+                params={'value': self.sex_restriction},
+                code='invalid_choice'
+            )
+            
+        if self.breed and self.breed not in dict(BREED_CHOICES):
+            raise ValidationError(
+                _("Invalid breed: %(value)s"),
+                params={'value': self.breed},
+                code='invalid_choice'
+            )
+            
+        if self.race_surface and self.race_surface not in dict(RACE_SURFACE):
+            raise ValidationError(
+                _("Invalid race surface: %(value)s"),
+                params={'value': self.race_surface},
+                code='invalid_choice'
+            )
+            
+        if self.race_type and self.race_type not in dict(EQUIBASE_RACE_TYPE_CHOICES):
+            raise ValidationError(
+                _("Invalid race type: %(value)s"),
+                params={'value': self.race_type},
+                code='invalid_choice'
+            )
         
         # Individual Field Validation
         if self.distance is not None:
-            if self.distance>32 or self.distance<=0:
+            if self.distance > 32 or self.distance <= 0:
                 raise ValidationError(
-                    _("Invalid distance: : %(value)"),
+                    _("Invalid distance: %(value)s"),
                     params={'value': self.distance},
                     code='invalid_input'
                 )
@@ -82,7 +133,7 @@ class Races(models.Model):
         if self.condition:
             if len(self.condition) < 3:
                 raise ValidationError(
-                    _("Invalid condition: : %(value)"),
+                    _("Invalid condition: %(value)s"),
                     params={'value': self.condition},
                     code='invalid_input'
                 )
@@ -97,103 +148,52 @@ class Races(models.Model):
         
         # DRF Results Import
         if self.drf_results_import:
-            if not self.race_type:
-                raise ValidationError(
-                    _("DRF results import requires valid race_type"),
-                    code='missing_input'
-                )
-            if not self.age_restriction:
-                raise ValidationError(
-                    _("DRF results import requires valid age restriction"),
-                    code='missing_input'
-                )
-            if not self.sex_restriction:
-                raise ValidationError(
-                    _("DRF results import requires valid sex restriction"),
-                    code='missing_input'
-                )
-            if self.minimum_claiming_price is None:
-                raise ValidationError(
-                    _("DRF results import requires valid minimum claiming price"),
-                    code='missing_input'
-                )
-            if self.maximum_claiming_price is None:
-                raise ValidationError(
-                    _("DRF results import requires valid maximum claiming price"),
-                    code='missing_input'
-                )
-            if not self.distance:
-                raise ValidationError(
-                    _("DRF results import requires valid distance"),
-                    code='missing_input'
-                )
-            if not self.purse:
-                raise ValidationError(
-                    _("DRF results import requires valid purse"),
-                    code='missing_input'
-                )
-            if not self.breed:
-                raise ValidationError(
-                    _("DRF results import requires valid breed"),
-                    code='missing_input'
-                )
-            if not self.race_surface:
-                raise ValidationError(
-                    _("DRF results import requires valid surface"),
-                    code='missing_input'
-                )
-            if not self.condition:
-                raise ValidationError(
-                    _("DRF results import requires track condition"),
-                    code='missing_input'
-                )
-        
-        # DRF Results Import
-        if self.equibase_chart_import:
-            if not self.age_restriction:
-                raise ValidationError(
-                    _("Equibase chart import requires valid age restriction"),
-                    code='missing_input'
-                )
-            if not self.sex_restriction:
-                raise ValidationError(
-                    _("Equibase chart  import requires valid sex restriction"),
-                    code='missing_input'
-                )
-            if not self.distance:
-                raise ValidationError(
-                    _("Equibase chart import requires valid distance"),
-                    code='missing_input'
-                )
-            if not self.purse:
-                raise ValidationError(
-                    _("Equibase chart import requires valid purse"),
-                    code='missing_input'
-                )
-            if not self.breed:
-                raise ValidationError(
-                    _("Equibase chart import requires valid breed"),
-                    code='missing_input'
-                )
-            if not self.race_surface:
-                raise ValidationError(
-                    _("Equibase chart import requires valid surface"),
-                    code='missing_input'
-                )
-            if not self.condition:
-                raise ValidationError(
-                    _("Equibase chart import requires track condition"),
-                    code='missing_input'
-                )
+            required_fields = {
+                'race_type': "race type",
+                'age_restriction': "age restriction",
+                'sex_restriction': "sex restriction",
+                'minimum_claiming_price': "minimum claiming price",
+                'maximum_claiming_price': "maximum claiming price",
+                'distance': "distance",
+                'purse': "purse",
+                'breed': "breed",
+                'race_surface': "surface",
+                'condition': "track condition"
+            }
             
-  
+            for field, name in required_fields.items():
+                if getattr(self, field) is None:
+                    raise ValidationError(
+                        _("DRF results import requires valid %(field)s"),
+                        params={'field': name},
+                        code='missing_input'
+                    )
         
+        # Equibase Chart Import
+        if self.equibase_chart_import:
+            required_fields = {
+                'age_restriction': "age restriction",
+                'sex_restriction': "sex restriction",
+                'distance': "distance",
+                'purse': "purse",
+                'breed': "breed",
+                'race_surface': "surface",
+                'condition': "track condition"
+            }
+            
+            for field, name in required_fields.items():
+                if getattr(self, field) is None:
+                    raise ValidationError(
+                        _("Equibase chart import requires valid %(field)s"),
+                        params={'field': name},
+                        code='missing_input'
+                    )
+    
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
 
 class Horses(models.Model):
-
     # common data
     horse_name = models.CharField(max_length=255, unique=True)
 
@@ -201,7 +201,7 @@ class Horses(models.Model):
     registration_number = models.CharField(max_length=255, null=True)
     sire = models.ForeignKey('Horses', on_delete=models.CASCADE, null=True, related_name='children_of_sire')
     dam = models.ForeignKey('Horses', on_delete=models.CASCADE, null=True, related_name='children_of_dam')
-    dam_sire = models.ForeignKey('Horses', on_delete=models.CASCADE, null=True, related_name= 'grandchildren')
+    dam_sire = models.ForeignKey('Horses', on_delete=models.CASCADE, null=True, related_name='grandchildren')
 
     # equibase entries
     equibase_horse_id = models.IntegerField(null=True)
@@ -217,19 +217,27 @@ class Horses(models.Model):
     
     def clean(self):
         
-        # Individual Field Validation
+        if '(' in self.horse_name:
+            raise ValidationError(
+                _("Invalid horse name due to parenthesis: %(value)s"),
+                params={'value': self.horse_name},
+                code='invalid_input'
+            )
+
         if self.registration_number and self.registration_number == '':
             raise ValidationError(
-                _("Invalid horse registration number: %(value)"),
+                _("Invalid horse registration number: %(value)s"),
                 params={'value': self.registration_number},
-                code='missing_input'
+                code='invalid_input'
             )
+            
         if self.equibase_horse_id and self.equibase_horse_id <= 0:
             raise ValidationError(
-                _("Invalid horse equibase horse id number: %(value)"),
+                _("Invalid horse equibase horse id number: %(value)s"),
                 params={'value': self.equibase_horse_id},
-                code='missing_input'
+                code='invalid_input'
             )
+            
         if self.equibase_horse_id:
             if not self.equibase_horse_type:
                 raise ValidationError(
@@ -237,19 +245,20 @@ class Horses(models.Model):
                     code='missing_input'
                 )
             elif len(self.equibase_horse_type) < 2:
-                 raise ValidationError(
-                    _("Invalid equibase_horse_type: %(value)"),
+                raise ValidationError(
+                    _("Invalid equibase_horse_type: %(value)s"),
                     params={'value': self.equibase_horse_type},
                     code='invalid_input'
                 )
+                
             if not self.equibase_horse_registry:
                 raise ValidationError(
                     _("Required equibase_horse_registry"),
                     code='missing_input'
                 )
             elif len(self.equibase_horse_registry) != 1:
-                 raise ValidationError(
-                    _("Invalid equibase_horse_registry: %(value)"),
+                raise ValidationError(
+                    _("Invalid equibase_horse_registry: %(value)s"),
                     params={'value': self.equibase_horse_registry},
                     code='invalid_input'
                 )
@@ -258,12 +267,10 @@ class Horses(models.Model):
         self.clean()
         super().save(*args, **kwargs)
 
-
 class Jockeys(models.Model):
-
     # common
-    first_name = models.CharField(max_length=255)
-    middle_name = models.CharField(max_length=255, blank=True)
+    first_name = models.CharField(max_length=255, null=True)
+    first_initials = models.CharField(max_length=10, null=True)
     last_name = models.CharField(max_length=255)
 
     # drf entries
@@ -276,13 +283,16 @@ class Jockeys(models.Model):
     equibase_jockey_type = models.CharField(max_length=3, null=True)
     
     def clean(self):
-        
-        # Individual Field Validation
         if self.drf_jockey_id and self.drf_jockey_id == '':
             raise ValidationError(
-                _("Invalid drf_jockey_id: %(value)"),
+                _("Invalid drf_jockey_id: %(value)s"),
                 params={'value': self.drf_jockey_id},
-                code='missing_input'
+                code='invalid_input'
+            )
+        if self.first_name is None and self.first_initials is None:
+            raise ValidationError(
+                _("Either first_name or first initials must be given"),
+                code='invalid_input'
             )
             
     def save(self, *args, **kwargs):
@@ -290,10 +300,9 @@ class Jockeys(models.Model):
         super().save(*args, **kwargs)
 
 class Trainers(models.Model):
-
     # common data
-    first_name = models.CharField(max_length=255)
-    middle_name = models.CharField(max_length=255, blank=True)
+    first_name = models.CharField(max_length=255, null=True)
+    first_initials = models.CharField(max_length=10, null=True)
     last_name = models.CharField(max_length=255)
 
     # drf entries
@@ -306,24 +315,23 @@ class Trainers(models.Model):
     equibase_trainer_type = models.CharField(max_length=3, null=True)
     
     def clean(self):
-        
-        # Individual Field Validation
         if self.drf_trainer_id and self.drf_trainer_id == '':
             raise ValidationError(
-                _("Invalid drf_trainer_id: %(value)"),
+                _("Invalid drf_trainer_id: %(value)s"),
                 params={'value': self.drf_trainer_id},
-                code='missing_input'
+                code='invalid_input'
+            )
+        if self.first_name is None and self.first_initials is None:
+            raise ValidationError(
+                _("Either first_name or first initials must be given"),
+                code='invalid_input'
             )
             
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
 
-
 class Entries(models.Model):
-
-
-
     # common data
     race = models.ForeignKey(Races, on_delete=models.CASCADE)
     horse = models.ForeignKey(Horses, on_delete=models.CASCADE)
@@ -354,69 +362,46 @@ class Entries(models.Model):
     # equibase charts
     comment = models.CharField(max_length=255, null=True)
     
-    
     def clean(self):
-        
-        # individual field logic
-        # post position
-        if self.program_number and self.program_number == '':
+        # Choice Field Validation
+        if self.scratch_indicator is not None and self.scratch_indicator not in dict(SCRATCH_REASON_CHOICES):
             raise ValidationError(
-                _("Invalid program number: %(value)"),
+                _("Invalid scratch indicator: %(value)s"),
+                params={'value': self.scratch_indicator},
+                code='invalid_choice'
+            )
+        
+        # Individual Field Validation
+        if self.program_number is not None and self.program_number == '':
+            raise ValidationError(
+                _("Invalid program number: %(value)s"),
                 params={'value': self.program_number},
                 code='invalid_input'
             )
             
-        # drf entries
+        # DRF Entries Import
         if self.drf_entries_import:
-            if not self.post_position:
-                raise ValidationError(
-                    _("Required post_position"),
-                    code='missing_input'
-                )
-            if not self.trainer:
-                raise ValidationError(
-                    _("Required trainer"),
-                    code='missing_input'
-                )
-            if not self.jockey:
-                raise ValidationError(
-                    _("Required jockey"),
-                    code='missing_input'
-                )
-            if not self.scratch_indicator:
-                raise ValidationError(
-                    _("Required scratch_indicator"),
-                    code='missing_input'
-                )
-            if self.medication is None:
-                raise ValidationError(
-                    _("Required medication"),
-                    code='missing_input'
-                )
-            if self.equipment is None:
-                raise ValidationError(
-                    _("Required equipment"),
-                    code='missing_input'
-                )
-            if not self.weight:
-                raise ValidationError(
-                    _("Required weight"),
-                    code='missing_input'
-                )
-            if not self.program_number:
-                raise ValidationError(
-                    _("Required program number"),
-                    code='missing_input'
-                )
-        
+            required_fields = {
+                'post_position': "post position",
+                'trainer': "trainer",
+                'jockey': "jockey",
+                'scratch_indicator': "scratch indicator",
+                'program_number': "program number"
+            }
+            if self.scratch_indicator and self.scratch_indicator == 'N':
+                for field, name in required_fields.items():
+                    if not getattr(self, field):
+                        raise ValidationError(
+                            _("DRF entries import requires valid %(field)s"),
+                            params={'field': name},
+                            code='missing_input'
+                        )
+    
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
 
 class Workouts(models.Model):
-
-
-
     horse = models.ForeignKey(Horses, on_delete=models.CASCADE)
     workout_date = models.DateField()
     track = models.ForeignKey(Tracks, on_delete=models.CASCADE)
@@ -428,29 +413,39 @@ class Workouts(models.Model):
     workout_total = models.IntegerField()
     
     def clean(self):
+        # Choice Field Validation
+        if self.surface and self.surface not in dict(RACE_SURFACE):
+            raise ValidationError(
+                _("Invalid surface: %(value)s"),
+                params={'value': self.surface},
+                code='invalid_choice'
+            )
         
-        # individual field logic
+        # Individual Field Validation
         if self.time_seconds <= 0:
             raise ValidationError(
-                _("Invalid time_seconds: %(value)"),
+                _("Invalid time_seconds: %(value)s"),
                 params={'value': self.time_seconds},
                 code='invalid_input'
             )
+            
         if self.distance <= 0:
             raise ValidationError(
-                _("Invalid distance: %(value)"),
+                _("Invalid distance: %(value)s"),
                 params={'value': self.distance},
                 code='invalid_input'
             )
+            
         if self.workout_rank <= 0:
             raise ValidationError(
-                _("Invalid workout_rank: %(value)"),
+                _("Invalid workout_rank: %(value)s"),
                 params={'value': self.workout_rank},
                 code='invalid_input'
             )
+            
         if self.workout_total <= 0:
             raise ValidationError(
-                _("Invalid workout_total: %(value)"),
+                _("Invalid workout_total: %(value)s"),
                 params={'value': self.workout_total},
                 code='invalid_input'
             )
@@ -460,9 +455,6 @@ class Workouts(models.Model):
         super().save(*args, **kwargs)
 
 class Payoffs(models.Model):
-
-    
-
     race = models.ForeignKey('Races', on_delete=models.CASCADE)
     wager_type = models.CharField(max_length=2, choices=BET_CHOICES)
     winning_numbers = models.CharField(max_length=255)
@@ -470,6 +462,18 @@ class Payoffs(models.Model):
     payoff_amount = models.FloatField(default=0)
     base_amount = models.FloatField(default=0)
 
+    def clean(self):
+        # Choice Field Validation
+        if self.wager_type and self.wager_type not in dict(BET_CHOICES):
+            raise ValidationError(
+                _("Invalid wager type: %(value)s"),
+                params={'value': self.wager_type},
+                code='invalid_choice'
+            )
+    
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
 class PointsOfCall(models.Model):
     entry = models.ForeignKey(Entries, on_delete=models.CASCADE)
@@ -495,4 +499,3 @@ class SplitCallVelocities(models.Model):
     total_time = models.FloatField()
     velocity = models.FloatField()
     lengths_back = models.FloatField()
-

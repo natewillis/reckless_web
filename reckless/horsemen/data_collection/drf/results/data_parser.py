@@ -4,6 +4,8 @@ import pytz
 import requests
 from django.db.models import Q
 from horsemen.models import Races, Tracks
+from horsemen.data_collection.utils import convert_string_to_furlongs, get_best_choice_from_description_code
+from horsemen.constants import BREED_CHOICES, EQUIBASE_RACE_TYPE_CHOICES, BET_CHOICES
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -67,17 +69,21 @@ def parse_extracted_results_data(extracted_results_data):
             'object_type': 'race',
             'race_date': race_date,
             'race_number': race_data["raceKey"]["raceNumber"],
-            'post_time': race_data.get('postTime', ''),
+            'track': {
+                'code': race_data["raceKey"]["trackId"],
+                'country': race_data["raceKey"]["country"]
+            },
+            'post_time_string': race_data.get('postTime', ''),
             'age_restriction': race_data.get("ageRestriction", ""),
             'sex_restriction': "O" if race_data.get("sexRestriction", "") == "" else race_data.get("sexRestriction", ""),
-            'minimum_claiming_price': race_data.get("minClaimPrice", 0),
-            'maximum_claiming_price': race_data.get("maxClaimPrice", 0),
-            'distance_description': race_data.get("distanceDescription", ""),
+            'minimum_claiming_price': int(race_data.get("minClaimPrice", 0)),
+            'maximum_claiming_price': int(race_data.get("maxClaimPrice", 0)),
+            'distance': convert_string_to_furlongs(race_data.get("distanceDescription", "")),
             'purse': float(race_data.get("totalPurse", "0").replace(',', '')),
-            'breed': race_data.get("breed", "Thoroughbred"),
+            'breed': get_best_choice_from_description_code(race_data.get("breed", "Thoroughbred"), BREED_CHOICES),
             'cancelled': False,
             'race_surface': race_data.get('surface', 'D'),
-            'race_type': race_data.get('raceTypeDescription', ''),
+            'race_type': get_best_choice_from_description_code(race_data.get('raceTypeDescription', ''), EQUIBASE_RACE_TYPE_CHOICES) ,
             'condition': race_data.get("trackConditionDescription", '').strip().upper(),
             'drf_results_import': True
         }
@@ -86,9 +92,9 @@ def parse_extracted_results_data(extracted_results_data):
         # Handle scratches
         for horse_name in race_data.get('scratches', []):
             scratch = {
-                'object_type': 'scratch',
+                'object_type': 'entry',
                 'race': race,
-                'horse_name': horse_name.strip().upper(),
+                'horse': {'horse_name': horse_name.strip().upper()},
                 'scratch_indicator': 'U'  # Unknown reason for scratch
             }
             parsed_results_data.append(scratch)
@@ -126,7 +132,7 @@ def parse_extracted_results_data(extracted_results_data):
             payoff = {
                 'object_type': 'payoff',
                 'race': race,
-                'wager_type': payoff_data.get('wagerType', ''),
+                'wager_type': get_best_choice_from_description_code(payoff_data.get('wagerName', ''), BET_CHOICES),
                 'winning_numbers': payoff_data.get('winningNumbers', '').strip().upper(),
                 'total_pool': float(payoff_data.get('totalPool', '0').replace(',', '')),
                 'payoff_amount': float(payoff_data.get('payoffAmount', '0').replace(',', '')),

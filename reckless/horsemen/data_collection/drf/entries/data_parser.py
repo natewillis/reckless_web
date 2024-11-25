@@ -3,7 +3,9 @@ from datetime import datetime, timedelta
 import pytz
 import requests
 from django.db.models import Q
-from horsemen.models import Races, Tracks
+from horsemen.models import Races
+from horsemen.data_collection.utils import convert_string_to_furlongs, get_best_choice_from_description_code, get_post_time_from_drf
+from horsemen.constants import BREED_CHOICES
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -67,15 +69,19 @@ def parse_extracted_entries_data(extracted_entries_data):
             'object_type': 'race',
             'race_date': race_date,
             'race_number': race_data["raceKey"]["raceNumber"],
-            'post_time': race_data.get('postTime', ''),
+            'track': {
+                'code': race_data["raceKey"]["trackId"],
+                'country': race_data["raceKey"]["country"]
+            },
+            'post_time_string': race_data.get('postTime', ''),
             'age_restriction': race_data.get("ageRestriction", ""),
             'sex_restriction': "O" if race_data.get("sexRestriction", "") == "" else race_data.get("sexRestriction", ""),
             'minimum_claiming_price': race_data.get("minClaimPrice", 0),
             'maximum_claiming_price': race_data.get("maxClaimPrice", 0),
-            'distance_description': race_data.get('distanceDescription', ''),
+            'distance': convert_string_to_furlongs(race_data.get('distanceDescription', '')),
             'purse': race_data.get("purse", 0),
             'wager_text': race_data.get("wagerText", ""),
-            'breed': race_data.get("breed", "Thoroughbred"),
+            'breed': get_best_choice_from_description_code(race_data.get("breed", "Thoroughbred"),BREED_CHOICES),
             'cancelled': race_data.get("isCancelled", False),
             'course_type': race_data.get('courseType', 'D'),
             'drf_entries_import': True
@@ -97,28 +103,30 @@ def parse_extracted_entries_data(extracted_entries_data):
             parsed_entries_data.append(horse)
 
             # Handle Trainer
-            trainer = {
-                'object_type': 'trainer',
-                'first_name': runner["trainer"]["firstName"].strip().upper(),
-                'last_name': runner["trainer"]["lastName"].strip().upper(),
-                'middle_name': (runner["trainer"].get("middleName") or "").strip().upper(),
-                'drf_trainer_id': runner["trainer"].get("id"),
-                'drf_trainer_type': runner["trainer"].get("type"),
-                'alias': (runner["trainer"].get("alias") or "").strip().upper()
-            }
-            parsed_entries_data.append(trainer)
+            if runner["trainer"].get("id") > 0:
+                trainer = {
+                    'object_type': 'trainer',
+                    'first_name': runner["trainer"]["firstName"].strip().upper(),
+                    'last_name': runner["trainer"]["lastName"].strip().upper(),
+                    'middle_name': (runner["trainer"].get("middleName") or "").strip().upper(),
+                    'drf_trainer_id': runner["trainer"].get("id"),
+                    'drf_trainer_type': runner["trainer"].get("type"),
+                    'alias': (runner["trainer"].get("alias") or "").strip().upper()
+                }
+                parsed_entries_data.append(trainer)
 
             # Handle Jockey
-            jockey = {
-                'object_type': 'jockey',
-                'first_name': runner["jockey"]["firstName"].strip().upper(),
-                'last_name': runner["jockey"]["lastName"].strip().upper(),
-                'middle_name': (runner["jockey"].get("middleName") or "").strip().upper(),
-                'drf_jockey_id': runner["jockey"].get("id"),
-                'drf_jockey_type': runner["jockey"].get("type"),
-                'alias': (runner["jockey"].get("alias") or "").strip().upper()
-            }
-            parsed_entries_data.append(jockey)
+            if runner["jockey"]["firstName"] != 'SCRATCHED' and runner["jockey"]["id"] > 0:
+                jockey = {
+                    'object_type': 'jockey',
+                    'first_name': runner["jockey"]["firstName"].strip().upper(),
+                    'last_name': runner["jockey"]["lastName"].strip().upper(),
+                    'middle_name': (runner["jockey"].get("middleName") or "").strip().upper(),
+                    'drf_jockey_id': runner["jockey"].get("id"),
+                    'drf_jockey_type': runner["jockey"].get("type"),
+                    'alias': (runner["jockey"].get("alias") or "").strip().upper()
+                }
+                parsed_entries_data.append(jockey)
             
             # Create entry
             entry = {
@@ -130,11 +138,18 @@ def parse_extracted_entries_data(extracted_entries_data):
                 'jockey': jockey,
                 'race': race,
                 'scratch_indicator': runner.get("scratchIndicator", ''),
-                'medication': runner.get("medication"),
-                'equipment': runner.get("equipment"),
+                'medication': runner.get("medication",''),
+                'equipment': runner.get("equipment",''),
                 'weight': float(runner.get("weight", 0)),
                 'drf_entries_import': True
             }
+            # fix scratch indicator of "Y"
+            entry['scratch_indicator']=entry['scratch_indicator'].replace('Y','U')
+
+            # fix scratch indicator of "N" when scratched
+            if entry['post_position'] > 90 and entry['scratch_indicator']=='N':
+                entry['scratch_indicator'] = 'U'
+                
             parsed_entries_data.append(entry)
 
     return parsed_entries_data

@@ -228,7 +228,6 @@ class EquibaseChartExtractor:
                     stripped_line = get_text_with_spaces(line).strip()
                     pattern = r'([\w\s]+:)|(Footnotes)'
                     if len(data['lines'])==0 or re.match(pattern, stripped_line):
-                        print(f'new line {stripped_line}')
                         data['lines'].append(stripped_line)
                     else:
                         data['lines'][-1] += ' ' + stripped_line

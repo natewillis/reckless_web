@@ -300,7 +300,7 @@ def get_point_of_call_object_from_furlongs(distance_furlongs, quarter_horse_flag
 
     # convert furlongs to feet
     distance_feet = distance_furlongs * 660
-    logger.debug(f' in get_point_of_call_object_from_furlongs, looking for {distance_feet} feet')
+    logger.debug(f' in get_point_of_call_object_from_furlongs, looking for {distance_feet} feet qh:{quarter_horse_flag}')
 
     #  quarterhorse
     if quarter_horse_flag:
@@ -315,6 +315,9 @@ def get_point_of_call_object_from_furlongs(distance_furlongs, quarter_horse_flag
             logger.debug(f'for {distance_feet} feet returning point of call for {last_point_of_call_object['floor']}')
             return last_point_of_call_object
         last_point_of_call_object = point_of_call_object
+    # were as long as we can get
+    logger.debug(f'for {distance_feet} feet returning point of call for {last_point_of_call_object['floor']}')
+    return last_point_of_call_object
         
 def create_fractional_data_from_array_and_object(fractional_times, race_distance):
 

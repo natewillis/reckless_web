@@ -3,6 +3,7 @@
 # Constants
 METERS_PER_FURLONG = 201.168
 METERS_PER_LENGTH = 2.4384
+FURLONGS_PER_FEET = 0.00151515
 
 # Models Choices
 EQUIBASE_SEX_RESTRICTIONS_CHOICES = [
@@ -54,7 +55,8 @@ BET_CHOICES = [
   ("W", "Twin Trifecta"),
   ("2", "Two in the Money"),
   ("K", "Win Four"),
-  ("HJ", "Super High Five Jackpot")
+  ("HJ", "Super High Five Jackpot"),
+  ("S5", "Super High Five")
 ]
 
 SCRATCH_REASON_CHOICES = [

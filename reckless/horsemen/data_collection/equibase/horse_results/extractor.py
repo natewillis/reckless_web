@@ -131,7 +131,7 @@ class EquibaseHorseResultsExtractor:
                             row.find('td', class_='date').get_text().strip(),
                             "%m/%d/%Y"
                         ).date(),
-                        'race_number': int(row.find('td', class_='race').get_text().strip())
+                        'race_number': int(row.find('td', class_='race').get_text().strip()),
                     })
 
             return entries

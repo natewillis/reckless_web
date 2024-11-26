@@ -4,10 +4,10 @@ Handles file scraping and data extraction coordination.
 """
 
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 from django.utils import timezone
-from horsemen.models import Races
+from django.db.models import Q
+from horsemen.models import Races, Horses, Entries
 from horsemen.data_collection.utils import SCRAPING_FOLDER
 from horsemen.data_collection.scraping import scrape_url_zenrows
 
@@ -16,24 +16,23 @@ logger = logging.getLogger(__name__)
 
 def get_equibase_entries_files():
     """
-    Scrape Equibase entries files for races that need entries data.
+    Scrape Equibase entries files for future races with horses missing equibase IDs.
     """
-    # Query races with the given conditions
+    # Get future races with horses missing equibase IDs
     races = Races.objects.filter(
-        drf_entries_import=True,
-        equibase_entries_import=False,
-        race_date__gt=datetime.now() - timedelta(days=7),
-        race_date__lt=datetime.now() + timedelta(days=5)
-    ).values_list('track__code', 'track__country', 'race_date').distinct()
+        race_date__gt=timezone.now().date(),
+        entries__horse__equibase_horse_id__isnull=True
+    ).distinct()
 
     # Process each race
-    for track_code, track_country, race_date in races:
+    for race in races:
         # Prepare file info
         url_to_scrape = (
             f'https://www.equibase.com/static/entry/'
-            f'{track_code}{race_date.strftime("%m%d%y")}{track_country}-EQB.html'
+            f'{race.track.code}{race.race_date.strftime("%m%d%y")}'
+            f'{race.track.country}-EQB.html'
         )
-        filename = f'EQB_ENTRIES_{track_code}_{race_date.strftime("%Y%m%d")}.html'
+        filename = f'EQB_ENTRIES_{race.track.code}_{race.race_date.strftime("%Y%m%d")}.html'
         entries_full_filename = SCRAPING_FOLDER / filename
 
         # Check if file already exists

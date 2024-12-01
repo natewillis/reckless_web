@@ -11,7 +11,8 @@ from horsemen.data_collection.utils import (
     convert_string_to_seconds,
     convert_lengths_back_string,
     convert_string_to_furlongs,
-    get_best_choice_from_description_code
+    get_best_choice_from_description_code,
+    get_horsename_and_country_from_drf
 )
 from horsemen.constants import BREED_CHOICES
 
@@ -133,7 +134,7 @@ def parse_distance_surface_track_record(line: str) -> Dict[str, Any]:
         
         # Parse surface
         remaining_string = split_string[1]
-        data['surface'] = 'D' if 'DIRT' in remaining_string.upper() else 'T'
+        data['race_surface'] = 'D' if 'DIRT' in remaining_string.upper() else 'T'
 
         # Parse track record if present
         pattern = r'Track Record: \((.+) - ([\d:\.]+) - (.+)\)'
@@ -179,6 +180,55 @@ def parse_purse(line: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error("Error parsing purse: %s", e)
         return {}
+    
+def parse_cancelled(line: str) -> Dict[str, Any]:
+    """
+    Parse cancelled race from a line of text.
+    
+    Args:
+        line: String containing cancelled race
+        
+    Returns:
+        Dictionary containing cancelled race
+    """
+    
+    try:
+        if 'CANCELLED - ' in line.upper():
+            return {'cancelled': True}
+        else:
+            return {}
+
+    except Exception as e:
+        logger.error("Error parsing cancelled race: %s", e)
+        return {}
+    
+def parse_track_condition(line: str) -> Dict[str, Any]:
+    """
+    Parse track condition amount from a line of text.
+    
+    Args:
+        line: String containing track condition information
+        
+    Returns:
+        Dictionary containing parsed track condition
+    """
+    
+    try:
+        if 'Track: ' not in line:
+            return {}
+
+        pattern = r'Track: (\w+)'
+        match = re.search(pattern, line)
+        if match:
+            condition = match.group(1).strip().upper()
+            logger.debug("Successfully parsed track condition: %s", condition)
+            return {'condition': condition}
+
+        return {}
+
+    except Exception as e:
+        logger.error("Error parsing condition: %s", e)
+        return {}
 
 def parse_entries(table_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
@@ -203,9 +253,10 @@ def parse_entries(table_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             match = re.search(pattern, horse_jockey_text)
             
             if match:
+                horse_name = match.group(1).upper().strip().replace('DQ-', '')
                 entry['horse'] = {
                     'object_type': 'horse',
-                    'horse_name': match.group(1).upper().strip().replace('DQ-', '')
+                    'horse_name': get_horsename_and_country_from_drf(horse_name)[0],
                 }
                 if match.group(3):  # Jockey information exists
                     entry['jockey'] = {
@@ -261,6 +312,14 @@ def parse_past_performance(table_data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 'program_number': program_number,
                 'children': []
             }
+
+            # get horse name as a backup
+            if 'HORSENAME' in entry_data:
+                if entry_data['HORSENAME']['normal_text'].strip().upper() != '':
+                    entry['horse'] = {
+                        'object_type': 'horse',
+                        'horse_name': get_horsename_and_country_from_drf(entry_data['HORSENAME']['normal_text'].strip().upper())[0],
+                    }
             
             # Parse points of call
             idx = 0
@@ -347,7 +406,9 @@ def parse_extracted_chart_data(extracted_chart_data: List[Dict[str, Any]]) -> Li
             {'parser': parse_race_type_name_grade_breed, 'output': 'attribute'},
             {'parser': parse_distance_surface_track_record, 'output': 'attribute'},
             {'parser': parse_purse, 'output': 'attribute'},
-            {'parser': parse_fractional_times, 'output': 'children'}
+            {'parser': parse_fractional_times, 'output': 'children'},
+            {'parser': parse_track_condition, 'output': 'attribute'},
+            {'parser': parse_cancelled, 'output': 'attribute'},
         ]
         
         table_parsers = {
@@ -359,6 +420,7 @@ def parse_extracted_chart_data(extracted_chart_data: List[Dict[str, Any]]) -> Li
         for race_data in extracted_chart_data:
             race = {
                 'object_type': 'race',
+                'equibase_chart_import': True,
                 'children': []
             }
 
@@ -377,6 +439,7 @@ def parse_extracted_chart_data(extracted_chart_data: List[Dict[str, Any]]) -> Li
                         race['children'].extend(config['parser'](race_data['tables'][table_name]))
                     else:
                         race.update(config['parser'](race_data['tables'][table_name]))
+
 
             parsed_chart_data.append(race)
 

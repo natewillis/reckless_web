@@ -1,0 +1,36 @@
+{% extends "core/base.html" %}
+
+{% block title %}Data Quality Analysis{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Data Quality Analysis</h1>
+    
+    <div class="list-group">
+        <a href="{% url 'horsemen:races_without_fractions' %}" class="list-group-item list-group-item-action">
+            <h5 class="mb-1">Races Without Fractional Times</h5>
+            <p class="mb-1">View races that are missing fractional time data</p>
+        </a>
+        
+        <a href="{% url 'horsemen:entries_velocity_issues' %}" class="list-group-item list-group-item-action">
+            <h5 class="mb-1">Entries with Velocity Issues</h5>
+            <p class="mb-1">View entries with missing or invalid split call velocities</p>
+        </a>
+        
+        <a href="{% url 'horsemen:entries_without_points' %}" class="list-group-item list-group-item-action">
+            <h5 class="mb-1">Entries without Points of Call</h5>
+            <p class="mb-1">View entries that are missing points of call data</p>
+        </a>
+        
+        <a href="{% url 'horsemen:entries_missing_charts' %}" class="list-group-item list-group-item-action">
+            <h5 class="mb-1">Entries Missing Charts</h5>
+            <p class="mb-1">View entries that have results but are missing charts</p>
+        </a>
+        
+        <a href="{% url 'horsemen:horses_without_workouts' %}" class="list-group-item list-group-item-action">
+            <h5 class="mb-1">Horses without Workouts</h5>
+            <p class="mb-1">View horses that are missing workout data</p>
+        </a>
+    </div>
+</div>
+{% endblock %}

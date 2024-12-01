@@ -1,0 +1,232 @@
+{% extends "core/base.html" %}
+
+{% block title %}Workout Velocities Histogram{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bar { fill: steelblue; }
+    .bar:hover { fill: brown; }
+    .axis-label { 
+        font-size: 12px;
+        fill: #666;
+    }
+    .tooltip {
+        position: absolute;
+        padding: 8px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border-radius: 4px;
+        font-size: 12px;
+        pointer-events: none;
+    }
+    .stats-box {
+        font-size: 12px;
+        fill: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Workout Velocities Distribution</h1>
+    
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <label for="distanceSelector" class="form-label">Filter by Distance:</label>
+            <select id="distanceSelector" class="form-select">
+                <option value="">All Distances</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="histogram"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+    let currentData = null;
+    const distanceSelector = document.getElementById('distanceSelector');
+
+    function updateVisualization(data) {
+        // Clear previous visualization
+        d3.select("#histogram").html("");
+        
+        const validData = data.velocities;
+            
+        // Set the dimensions and margins of the graph
+        const margin = {top: 40, right: 40, bottom: 60, left: 60};
+        const width = 800 - margin.left - margin.right;
+        const height = 400 - margin.top - margin.bottom;
+
+        // Create tooltip div
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Create the SVG container
+        const svg = d3.select("#histogram")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Calculate optimal number of bins
+        const binCount = Math.min(30, Math.ceil(Math.sqrt(validData.length)));
+
+        // Create the histogram generator
+        const histogram = d3.bin()
+            .value(d => d)
+            .domain([0, d3.max(validData)])
+            .thresholds(binCount);
+
+        // Generate the bins
+        const bins = histogram(validData);
+
+        // Create scales
+        const x = d3.scaleLinear()
+            .domain([0, d3.max(validData)])
+            .nice()
+            .range([0, width]);
+
+        const y = d3.scaleLinear()
+            .domain([0, d3.max(bins, d => d.length)])
+            .nice()
+            .range([height, 0]);
+
+        // Format x-axis values
+        const formatValue = d3.format(".1f");
+        const xAxis = d3.axisBottom(x)
+            .tickFormat(d => d + " m/s");
+
+        // Add X axis
+        svg.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(xAxis)
+            .selectAll("text")
+            .style("text-anchor", "end")
+            .attr("dx", "-.8em")
+            .attr("dy", ".15em")
+            .attr("transform", "rotate(-45)");
+
+        // Add X axis label
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("x", width / 2)
+            .attr("y", height + margin.bottom - 5)
+            .attr("text-anchor", "middle")
+            .text("Velocity (meters per second)");
+
+        // Add Y axis
+        svg.append("g")
+            .call(d3.axisLeft(y));
+
+        // Add Y axis label
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -height / 2)
+            .attr("y", -margin.left + 15)
+            .attr("text-anchor", "middle")
+            .text("Frequency");
+
+        // Add title
+        const titleText = distanceSelector.value 
+            ? `Distribution of ${distanceSelector.value} Furlong Workout Velocities`
+            : 'Distribution of All Workout Velocities';
+
+        svg.append("text")
+            .attr("x", width / 2)
+            .attr("y", -margin.top / 2)
+            .attr("text-anchor", "middle")
+            .style("font-size", "16px")
+            .text(titleText);
+
+        // Add the bars
+        svg.selectAll("rect")
+            .data(bins)
+            .join("rect")
+            .attr("class", "bar")
+            .attr("x", d => x(d.x0))
+            .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
+            .attr("y", d => y(d.length))
+            .attr("height", d => height - y(d.length))
+            .on("mouseover", function(event, d) {
+                tooltip.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                tooltip.html(
+                    `Range: ${formatValue(d.x0)} - ${formatValue(d.x1)} m/s<br/>` +
+                    `Count: ${d.length}<br/>` +
+                    `Percentage: ${((d.length / validData.length) * 100).toFixed(1)}%`
+                )
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", function(d) {
+                tooltip.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+
+        // Calculate and display summary statistics
+        const mean = d3.mean(validData);
+        const median = d3.median(validData);
+        const stdDev = d3.deviation(validData);
+
+        const stats = svg.append("g")
+            .attr("class", "stats-box")
+            .attr("transform", `translate(${width - 180}, 20)`);
+
+        stats.append("text")
+            .attr("x", 0)
+            .attr("y", 0)
+            .text(`Mean: ${formatValue(mean)} m/s`);
+
+        stats.append("text")
+            .attr("x", 0)
+            .attr("y", 20)
+            .text(`Median: ${formatValue(median)} m/s`);
+
+        stats.append("text")
+            .attr("x", 0)
+            .attr("y", 40)
+            .text(`Std Dev: ${formatValue(stdDev)} m/s`);
+    }
+
+    // Load initial data and set up distance selector
+    fetch('{% url "horsemen:workout_velocity_data" %}')
+        .then(response => response.json())
+        .then(data => {
+            currentData = data;
+            
+            // Populate distance selector
+            data.distances.forEach(distance => {
+                const option = document.createElement('option');
+                option.value = distance;
+                option.textContent = `${distance} Furlongs`;
+                distanceSelector.appendChild(option);
+            });
+
+            // Initial visualization
+            updateVisualization(data);
+        });
+
+    // Handle distance selection changes
+    distanceSelector.addEventListener('change', function() {
+        const distance = this.value;
+        const url = new URL('{% url "horsemen:workout_velocity_data" %}', window.location.origin);
+        if (distance) {
+            url.searchParams.set('distance', distance);
+        }
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                currentData = data;
+                updateVisualization(data);
+            });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "core/base.html" %}
+
+{% block title %}Entries Missing Charts{% endblock %}
+
+{% block extra_css %}
+<style>
+    .data-table {
+        width: 100%;
+        margin-bottom: 1rem;
+        border-collapse: collapse;
+    }
+    .data-table th, .data-table td {
+        padding: 8px;
+        border: 1px solid #ddd;
+    }
+    .data-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+    .data-table tbody tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+    .data-table tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+    .empty-message {
+        padding: 1rem;
+        color: #666;
+        font-style: italic;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Entries Missing Charts</h1>
+        <a href="{% url 'horsemen:data_quality' %}" class="btn btn-secondary">Back to Data Quality</a>
+    </div>
+
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Track</th>
+                    <th>Race #</th>
+                    <th>Horse</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if entries_missing_charts %}
+                    {% for entry in entries_missing_charts %}
+                        <tr>
+                            <td>{{ entry.race.race_date }}</td>
+                            <td>{{ entry.race.track.name }}</td>
+                            <td>{{ entry.race.race_number }}</td>
+                            <td>{{ entry.horse.horse_name }}</td>
+                            <td>
+                                <a href="{% url 'horsemen:past_performance' entry.race.id %}" class="btn btn-sm btn-primary">View PP</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr><td colspan="5" class="empty-message">No entries found with missing charts.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

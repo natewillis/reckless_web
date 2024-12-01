@@ -61,6 +61,7 @@ class EquibaseEntriesExtractor:
                 if race_data:
                     self.data.append(race_data)
 
+
             logger.info('Successfully parsed %d races', len(self.data))
 
         except Exception as e:
@@ -130,7 +131,6 @@ class EquibaseEntriesExtractor:
                 entry_data = self._extract_entry_data(horse_row, entry_header_data)
                 if entry_data:
                     race_data['entries'].append(entry_data)
-
             return race_data
 
         except Exception as e:

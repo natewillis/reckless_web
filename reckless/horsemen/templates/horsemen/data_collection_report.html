@@ -1,0 +1,77 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block title %}Data Collection Report{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Data Collection Report - AQU {{ report_date|date:"M d, Y" }}</h1>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Race</th>
+                    <th>PP</th>
+                    <th>Horse</th>
+                    <th>Horse Results URL</th>
+                    <th>Results Import</th>
+                    <th>Entries Import</th>
+                    <th>Past Races</th>
+                    <th>Races w/Charts</th>
+                    <th>Workouts</th>
+                    <th>DRF Import</th>
+                    <th>Scratch</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr>
+                    <td>{{ entry.race.race_number }}</td>
+                    <td>{{ entry.program_number }}</td>
+                    <td>{{ entry.horse.horse_name }}</td>
+                    <td>
+                        {% if entry.horse.get_equibase_horse_results_url %}
+                        <a href="{{ entry.horse.get_equibase_horse_results_url }}" target="_blank" class="text-decoration-none">
+                            View Results
+                        </a>
+                        {% else %}
+                        No URL
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.equibase_horse_results_import %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="badge bg-danger">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.equibase_horse_entries_import %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="badge bg-danger">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ entry.horse.past_entries|length }}</td>
+                    <td>{{ entry.horse.past_entries_with_charts|length }}</td>
+                    <td>{{ entry.horse.all_workouts|length }}</td>
+                    <td>
+                        {% if entry.drf_entries_import %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="badge bg-danger">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ entry.get_scratch_indicator_display }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center">No entries found for tomorrow's races at AQU.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

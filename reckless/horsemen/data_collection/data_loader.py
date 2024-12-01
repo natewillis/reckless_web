@@ -256,14 +256,16 @@ def parse_trainer(trainer_data: Dict[str, Any], existing_instance: Optional[Trai
                         trainer = Trainers.objects.filter(**{fields: trainer_data[fields]}).first()
         
         # custom first initial search
-        if not trainer and 'last_name' in trainer_data and 'first_initials' in trainer_data:
-            trainer = Trainers.objects.filter(
-                Q(last_name=trainer_data['last_name']) & Q(first_name__startswith=trainer_data['first_initials'][0])
-            )
-        if not trainer and 'last_name' in trainer_data and 'first_name' in trainer_data:
-            trainer = Trainers.objects.filter(
-                Q(last_name=trainer_data['last_name']) & Q(first_initials__startswith=trainer_data['first_name'][0])
-            )
+        if not trainer and 'last_name' in trainer_data and trainer_data['last_name'] != '':
+            if 'first_initials' in trainer_data:
+                trainer = Trainers.objects.filter(
+                    Q(last_name=trainer_data['last_name']) & Q(first_name__startswith=trainer_data['first_initials'][0])
+                ).first()
+            if not trainer and 'first_name' in trainer_data:
+                if trainer_data['last_name'] != '' and trainer_data['first_name'] != '':
+                    trainer = Trainers.objects.filter(
+                        Q(last_name=trainer_data['last_name']) & Q(first_initials__startswith=trainer_data['first_name'][0])
+                    ).first()
 
         # Create new trainer if needed
         if not trainer:
@@ -345,14 +347,15 @@ def parse_jockey(jockey_data: Dict[str, Any], existing_instance: Optional[Jockey
                         jockey = Jockeys.objects.filter(**{fields: jockey_data[fields]}).first()
 
         # custom first initial search
-        if not jockey and 'last_name' in jockey_data and 'first_initials' in jockey_data:
-            jockey = Jockeys.objects.filter(
-                Q(last_name=jockey_data['last_name']) & Q(first_name__startswith=jockey_data['first_initials'][0])
-            ).first()
-        if not jockey and 'last_name' in jockey_data and 'first_name' in jockey_data:
-            jockey = Jockeys.objects.filter(
-                Q(last_name=jockey_data['last_name']) & Q(first_initials__startswith=jockey_data['first_name'][0])
-            ).first()
+        if not jockey and 'last_name' in jockey_data and jockey_data['last_name'] != '':
+            if 'first_initials' in jockey_data:
+                jockey = Jockeys.objects.filter(
+                    Q(last_name=jockey_data['last_name']) & Q(first_name__startswith=jockey_data['first_initials'][0])
+                ).first()
+            if not jockey and 'first_name' in jockey_data:
+                jockey = Jockeys.objects.filter(
+                    Q(last_name=jockey_data['last_name']) & Q(first_initials__startswith=jockey_data['first_name'][0])
+                ).first()
 
         # Create new jockey if needed
         if not jockey:
@@ -444,10 +447,9 @@ def parse_entry(entry_data: Dict[str, Any], parent_object: Optional[Races] = Non
                     if race_entry.horse.horse_name == entry_data['horse']['horse_name']:
                         horse = race_entry.horse
                         entry = race_entry
-                        break
 
             # actually search for horse
-            horse = horse or parse_horse(entry_data['horse'])
+            horse = parse_horse(entry_data['horse'], horse)
             if horse and not entry:
                 entry, created = Entries.objects.get_or_create(
                     race=race,
@@ -457,6 +459,8 @@ def parse_entry(entry_data: Dict[str, Any], parent_object: Optional[Races] = Non
                     logger.info("Created new entry: %s", entry)
             elif not horse:
                 raise ValueError("Could not parse horse data")
+        elif entry and 'horse' in entry_data:
+            horse = parse_horse(entry_data['horse'], entry.horse)
 
         if not entry:
             raise ValueError("No matching entry found or could be created: %s", entry_data)

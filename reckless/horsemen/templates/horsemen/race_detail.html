@@ -47,6 +47,8 @@
                             <th>Weight</th>
                             <th>Med/Equip</th>
                             <th>Comment</th>
+                            <th>EQ ID</th>
+                            <th>EQ Horse REsult Import</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,11 +65,14 @@
                                 {% if entry.equipment %}/{{ entry.equipment }}{% endif %}
                             </td>
                             <td>{{ entry.comment|default:"" }}</td>
+                            <td>{{ entry.horse.equibase_horse_id }}</td>
+                            <td>{{ entry.equibase_horse_results_import }}</td>
                         </tr>
                         {% empty %}
                         <tr>
                             <td colspan="8" class="text-center">No entries found for this race.</td>
                         </tr>
+                        
                         {% endfor %}
                     </tbody>
                 </table>

@@ -4,7 +4,7 @@ import pytz
 import requests
 from django.db.models import Q
 from horsemen.models import Races
-from horsemen.data_collection.utils import convert_string_to_furlongs, get_best_choice_from_description_code, get_post_time_from_drf
+from horsemen.data_collection.utils import convert_string_to_furlongs, get_best_choice_from_description_code, get_horsename_and_country_from_drf
 from horsemen.constants import BREED_CHOICES
 
 # Configure logging
@@ -19,7 +19,7 @@ def get_entries_data():
 
     # Get current date
     today = datetime.now(pytz.UTC).date()
-    three_days_future = today + timedelta(days=3)
+    three_days_future = today + timedelta(days=1)
 
     # Query races that match our criteria
     races = Races.objects.filter(
@@ -94,7 +94,8 @@ def parse_extracted_entries_data(extracted_entries_data):
             # Handle Horse
             horse = {
                 'object_type': 'horse',
-                'horse_name': runner['horseName'].strip().upper(),
+                'horse_name': get_horsename_and_country_from_drf(runner['horseName'].strip().upper())[0],
+                'horse_state_or_country': get_horsename_and_country_from_drf(runner['horseName'].strip().upper())[1],
                 'registration_number': runner.get('registrationNumber', ''),
                 'sire_name': runner.get('sireName', '').strip().upper(),
                 'dam_name': runner.get('damName', '').strip().upper(),
@@ -149,6 +150,8 @@ def parse_extracted_entries_data(extracted_entries_data):
             # fix scratch indicator of "N" when scratched
             if entry['post_position'] > 90 and entry['scratch_indicator']=='N':
                 entry['scratch_indicator'] = 'U'
+            if entry['program_number'] == '':
+                del entry['program_number']
                 
             parsed_entries_data.append(entry)
 

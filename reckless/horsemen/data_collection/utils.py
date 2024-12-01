@@ -6,9 +6,7 @@ import pytz
 from datetime import datetime
 from fuzzywuzzy import process
 import logging
-import numpy as np
-from scipy.interpolate import InterpolatedUnivariateSpline
-from horsemen.constants import FRACTIONALS, POINTS_OF_CALL, POINTS_OF_CALL_QH, METERS_PER_FURLONG, METERS_PER_LENGTH
+from horsemen.constants import FRACTIONALS, POINTS_OF_CALL, POINTS_OF_CALL_QH
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -212,6 +210,28 @@ def get_post_time_from_drf(track, race_date, post_time_local_str):
 
     return post_time_utc
 
+def get_horsename_and_country_from_drf(horse_name):
+    """
+    Parses a horse name to extract the name and country of origin.
+    
+    If the name contains a parenthesis with three letters (e.g., "HorseName (USA)"),
+    it returns the name part and the three letters as the country.
+    Otherwise, it returns the whole string as the name and 'USA' as the country.
+    
+    Args:
+        horse_name (str): The horse name string to parse.
+        
+    Returns:
+        tuple: A tuple containing the name (str) and country (str).
+    """
+    match = re.search(r"(.*?)\s*\((\w{2,3})\)$", horse_name)
+    if match:
+        name = match.group(1).strip()
+        country = match.group(2)
+        return name, country
+    return horse_name, "USA"
+    
+
 def get_best_choice_from_description_code(input_string, choices):
     
     # process input string
@@ -354,7 +374,13 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
                 'distance': race_distance if index+1 == len(fractional_times) else fractional['feet']/660,
                 'time': fractional_time
             })
+        
+        # sanity check
+        if fractional_data[-1]['time'] == fractional_data[-2]['time']:
+            logger.error(f'there are duplicate fractional times:\nFinished:{fractional_data}\nObject:{fractional_object}\nTimes:{fractional_times}')
+        
         return fractional_data
+    
     else:
         # do our best to map the times to the fractional object
         # setup variables needed inside either loop
@@ -424,60 +450,16 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
             'point': 6,
             'text': 'FIN',
             'distance': race_distance,
-            'time': fractional_time
+            'time': final_time
         })
+
+        # sanity check
+        if fractional_data[-1]['time'] == fractional_data[-2]['time']:
+            logger.error(f'there are duplicate fractional times:\nFinished:{fractional_data}\nObject:{fractional_object}\nTimes:{fractional_times}')
+
         
         # finished
         return fractional_data
     
-def get_position_velocity_array_from_fractions_and_points_of_call(fractions, points_of_call, num_points=5):
-    
-    # get the race distance (everything in meters)
-    race_distance = fractions[-1].distance * METERS_PER_FURLONG
-    
-    # get the array of distances based on num points
-    evaluation_distances = np.linspace(0,race_distance,num_points+1)
-    
-    # points of call data formatting
-    horse_lb_distance=[0]
-    horse_lb=[0]
-    for point_of_call in points_of_call:
-        if point_of_call.distance > 0:
-            horse_lb_distance.append(point_of_call.distance * METERS_PER_FURLONG)
-            horse_lb.append(point_of_call.lengths_back * METERS_PER_LENGTH)
-    
-    # fractional data formatting
-    fractional_distances = [0]
-    fractional_times = [0]
-    for fraction in fractions:
-        fractional_distances.append(fraction.distance * METERS_PER_FURLONG)
-        fractional_times.append(fraction.time)
-        
-    # get horses lengths back from leader at each interval
-    horse_lb_at_distance = np.interp(
-        evaluation_distances,
-        horse_lb_distance,
-        horse_lb
-    )
-    
-    # get leaders position when horse is crossing each interval
-    leader_distance_at_horse_distance = np.array(evaluation_distances) + horse_lb_at_distance
-    
-    # must use a spline to do the extrapolation in case the horse inst the leader
-    # and leader distance is longer than the race distance
-    
-    fractional_distance_time_spline = InterpolatedUnivariateSpline(
-        fractional_distances,
-        fractional_times,
-        k=1 # linear extrapolation
-    )
-    
-    # get leaders time at those positions (which is the horses time at the intervals)
-    horse_times = fractional_distance_time_spline(leader_distance_at_horse_distance)
 
-    # get velocity
-    horse_velocities = (evaluation_distances[1]-evaluation_distances[0]) / np.diff(horse_times)
-
-    return horse_velocities
-        
     

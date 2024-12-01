@@ -10,7 +10,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
-from horsemen.data_collection.utils import convert_string_to_furlongs, convert_string_to_seconds
+from horsemen.data_collection.utils import convert_string_to_furlongs, convert_string_to_seconds, get_horsename_and_country_from_drf
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class EquibaseHorseResultsExtractor:
             if horse_id_checkbox:
                 return {
                     'equibase_horse_id': int(horse_id_checkbox['data-comid']),
-                    'horse_name': horse_id_checkbox['data-comname'].upper().strip(),
+                    'horse_name': get_horsename_and_country_from_drf(horse_id_checkbox['data-comname'].upper().strip())[0],
                     'equibase_horse_type': horse_id_checkbox['data-comrbt'].upper().strip(),
                     'equibase_horse_registry': horse_id_checkbox['data-comreg'].upper().strip()
                 }

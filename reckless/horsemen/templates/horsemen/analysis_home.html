@@ -1,0 +1,41 @@
+{% extends "core/base.html" %}
+
+{% block title %}Horse Racing Analysis{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Horse Racing Analysis</h1>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Split Call Velocities Analysis</h5>
+                    <p class="card-text">View distribution of split call velocities across all races.</p>
+                    <a href="{% url 'horsemen:velocity_histogram' %}" class="btn btn-primary">View Histogram</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Workout Velocities Analysis</h5>
+                    <p class="card-text">View distribution of workout velocities across all distances.</p>
+                    <a href="{% url 'horsemen:workout_velocity_histogram' %}" class="btn btn-primary">View Histogram</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Data Quality Analysis</h5>
+                    <p class="card-text">View data quality issues and missing information.</p>
+                    <a href="{% url 'horsemen:data_quality' %}" class="btn btn-primary">View Report</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,7 +4,7 @@ import pytz
 import requests
 from django.db.models import Q
 from horsemen.models import Races, Tracks
-from horsemen.data_collection.utils import convert_string_to_furlongs, get_best_choice_from_description_code
+from horsemen.data_collection.utils import convert_string_to_furlongs, get_best_choice_from_description_code, get_horsename_and_country_from_drf
 from horsemen.constants import BREED_CHOICES, EQUIBASE_RACE_TYPE_CHOICES, BET_CHOICES
 
 # Configure logging
@@ -19,7 +19,7 @@ def get_results_data():
 
     # Get current date
     today = datetime.now(pytz.UTC).date()
-    fourteen_days_ago = today - timedelta(days=14)
+    fourteen_days_ago = today - timedelta(days=1)
 
     # Query races that match our criteria
     races = Races.objects.filter(
@@ -94,7 +94,11 @@ def parse_extracted_results_data(extracted_results_data):
             scratch = {
                 'object_type': 'entry',
                 'race': race,
-                'horse': {'horse_name': horse_name.strip().upper()},
+                'horse': {
+                    'object_type': 'horse',
+                    'horse_name': get_horsename_and_country_from_drf(horse_name.strip().upper())[0],
+                    'horse_state_or_country': get_horsename_and_country_from_drf(horse_name.strip().upper())[1],
+                },
                 'scratch_indicator': 'U'  # Unknown reason for scratch
             }
             parsed_results_data.append(scratch)
@@ -106,7 +110,8 @@ def parse_extracted_results_data(extracted_results_data):
             # Create horse entry
             horse = {
                 'object_type': 'horse',
-                'horse_name': horse_name
+                'horse_name': get_horsename_and_country_from_drf(horse_name.strip().upper())[0],
+                'horse_state_or_country': get_horsename_and_country_from_drf(horse_name.strip().upper())[1],
             }
             parsed_results_data.append(horse)
 

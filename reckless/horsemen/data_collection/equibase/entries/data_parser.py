@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -233,7 +234,7 @@ def parse_extracted_entries_data(extracted_data: List[Dict[str, Any]]) -> List[D
             parsed_race = parse_race_data(race_data)
             if parsed_race:
                 parsed_data.append(parsed_race)
-
+                
         logger.info("Successfully parsed %d races", len(parsed_data))
         return parsed_data
 

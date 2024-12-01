@@ -6,6 +6,9 @@ import json
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# precompile regex
+page_type_pattern = re.compile(r'([A-Z0-9\s&]+)\s?-\s?(.+?)\s?-\s?Race\s?(\d+)')
+
 # parsing lines into normal lines
 def get_text_with_spaces(line):
 
@@ -145,7 +148,7 @@ class EquibaseChartExtractor:
                 extracted_lines = page.extract_text_lines()
 
                 # check what kind of page this is
-                if re.search(r'([A-Z0-9\s&]+)\s?-\s?(.+)+\s?-\s?Race\s?(\d+)', extracted_lines[0]['text']):
+                if page_type_pattern.search(extracted_lines[0]['text']):
                     # this is the first page of a race
                     plumber_lines.append(extracted_lines)
                 else:
@@ -178,7 +181,7 @@ class EquibaseChartExtractor:
                     'table_name': 'entries'
                 },
                 {
-                    'header_pattern': r'Horse\s*Name\s*Start',
+                    'header_pattern': r'Horse\s*Name\s*(Start|1|2)',
                     'stop_pattern': r'(?:Trainers:|Owners:)',
                     'table_name': 'past_performance'
                 }

@@ -1,0 +1,179 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block title %}Past Performance - Race {{ race.race_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Race Header -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <div class="row">
+                <div class="col">
+                    <h2 class="h4 mb-0">
+                        {{ race.track.name }} R{{ race.race_number }} | {{ race.race_date|date:"D M d" }} | Post Time: {{ race.post_time|date:"g:i A" }} ET
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <p class="mb-2">
+                        {% if race.race_name %}{{ race.race_name }}{% endif %}
+                        {% if race.grade %}(G{{ race.grade }}){% endif %}
+                    </p>
+                    <p class="mb-2">
+                        {{ race.get_age_restriction_display }}
+                        {{ race.get_sex_restriction_display }}
+                        | {{ race.distance }} Furlongs
+                        | {{ race.get_race_surface_display }}
+                        | Purse: ${{ race.purse|intcomma }}
+                    </p>
+                </div>
+                <div class="col-md-4">
+                    <div class="track-diagram text-end">
+                        <!-- Track diagram could be added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entries -->
+    {% for entry in entries %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="row align-items-center">
+                <div class="col-1">
+                    <h3 class="h5 mb-0">{{ entry.program_number }}</h3>
+                </div>
+                <div class="col">
+                    <h3 class="h5 mb-0">{{ entry.horse.horse_name }}</h3>
+                </div>
+                <div class="col-auto">
+                    <span class="badge bg-secondary">PP: {{ entry.post_position }}</span>
+                    {% if entry.scratch_indicator != 'N' %}
+                    <span class="badge bg-danger">SCR</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Horse Info -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <p class="mb-1">
+                        <strong>Trainer:</strong> {{ entry.trainer.first_name }} {{ entry.trainer.last_name }}
+                    </p>
+                    <p class="mb-1">
+                        <strong>Jockey:</strong> {{ entry.jockey.first_name }} {{ entry.jockey.last_name }}
+                    </p>
+                    {% if entry.weight %}
+                    <p class="mb-1">
+                        <strong>Weight:</strong> {{ entry.weight }} lbs
+                    </p>
+                    {% endif %}
+                    {% if entry.medication %}
+                    <p class="mb-1">
+                        <strong>Medication:</strong> {{ entry.medication }}
+                    </p>
+                    {% endif %}
+                    {% if entry.equipment %}
+                    <p class="mb-1">
+                        <strong>Equipment:</strong> {{ entry.equipment }}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    {% if entry.equibase_speed_rating %}
+                    <p class="mb-1">
+                        <strong>Speed Rating:</strong> {{ entry.equibase_speed_rating }}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Past Performances -->
+            {% if entry.horse.past_entries %}
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Track</th>
+                            <th>Race</th>
+                            <th>Dist</th>
+                            <th>Surface</th>
+                            <th>Points of Call</th>
+                            <th>Final Time</th>
+                            <th>Speed</th>
+                            <th>Comment</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for past_entry in entry.horse.past_entries %}
+                        <tr>
+                            <td>{{ past_entry.race.race_date|date:"m/d/y" }}</td>
+                            <td>{{ past_entry.race.track.code }}</td>
+                            <td>{{ past_entry.race.race_number }}</td>
+                            <td>{{ past_entry.race.distance }}F</td>
+                            <td>{{ past_entry.race.get_race_surface_display }}</td>
+                            <td>
+                                {% for call in past_entry.pointsofcall_set.all %}
+                                {{ call.position }}<sup>{{ call.lengths_back|floatformat:1 }}</sup>
+                                {% endfor %}
+                            </td>
+                            <td>{{ past_entry.final_time|default:"-" }}</td>
+                            <td>{{ past_entry.equibase_speed_rating|default:"-" }}</td>
+                            <td>{{ past_entry.comment|default:"-" }}</td>
+                            <td>
+                                <a href="{% url 'horsemen:past_performance' past_entry.race.id %}" class="btn btn-sm btn-outline-secondary">
+                                    Past Perf.
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- Workouts -->
+            {% if entry.horse.recent_workouts %}
+            <h4 class="h6 mt-3">Recent Workouts</h4>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Track</th>
+                            <th>Distance</th>
+                            <th>Surface</th>
+                            <th>Time</th>
+                            <th>Rank</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for workout in entry.horse.recent_workouts %}
+                        <tr>
+                            <td>{{ workout.workout_date|date:"m/d/y" }}</td>
+                            <td>{{ workout.track.code }}</td>
+                            <td>{{ workout.distance }}F</td>
+                            <td>{{ workout.get_surface_display }}</td>
+                            <td>{{ workout.time_seconds }}</td>
+                            <td>{{ workout.workout_rank }}/{{ workout.workout_total }}</td>
+                            <td>{{ workout.note }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

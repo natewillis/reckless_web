@@ -36,6 +36,10 @@ class Tracks(models.Model):
     def get_equibase_chart_url_for_date(self, race_date):
         return f'https://www.equibase.com/premium/eqbPDFChartPlus.cfm?RACE=A&BorP=P&TID={self.code}&CTRY={self.country}&DT={race_date.strftime('%m/%d/%Y')}&DAY=D&STYLE=EQB'
 
+    def get_equibase_entries_url_for_date(self, race_date):
+        return f'https://www.equibase.com/static/entry/{self.code}{race_date.strftime("%m%d%y")}{self.country}-EQB.html'
+
+
 class Races(models.Model):
     # Common
     track = models.ForeignKey(Tracks, on_delete=models.CASCADE)
@@ -171,23 +175,22 @@ class Races(models.Model):
         
         # Equibase Chart Import
         if self.equibase_chart_import:
-            required_fields = {
-                'age_restriction': "age restriction",
-                'sex_restriction': "sex restriction",
-                'distance': "distance",
-                'purse': "purse",
-                'breed': "breed",
-                'race_surface': "surface",
-                'condition': "track condition"
-            }
-            
-            for field, name in required_fields.items():
-                if getattr(self, field) is None:
-                    raise ValidationError(
-                        _("Equibase chart import requires valid %(field)s"),
-                        params={'field': name},
-                        code='missing_input'
-                    )
+            if not self.cancelled:
+                required_fields = {
+                    'distance': "distance",
+                    'purse': "purse",
+                    'breed': "breed",
+                    'race_surface': "surface",
+                    'condition': "track condition"
+                }
+                
+                for field, name in required_fields.items():
+                    if getattr(self, field) is None:
+                        raise ValidationError(
+                            _("Equibase chart import requires valid %(field)s"),
+                            params={'field': name},
+                            code='missing_input'
+                        )
     
     def save(self, *args, **kwargs):
         self.clean()
@@ -216,7 +219,7 @@ class Horses(models.Model):
             return ''
     
     def clean(self):
-        
+
         if '(' in self.horse_name:
             raise ValidationError(
                 _("Invalid horse name due to parenthesis: %(value)s"),
@@ -491,7 +494,7 @@ class FractionalTimes(models.Model):
     time = models.FloatField()
 
 class SplitCallVelocities(models.Model):
-    race = models.ForeignKey(Races, on_delete=models.CASCADE)
+    entry = models.ForeignKey(Entries, on_delete=models.CASCADE)
     point = models.IntegerField()
     start_distance = models.FloatField()
     end_distance = models.FloatField()

@@ -31,7 +31,7 @@ def parse_track_race_date_race_number(line: str) -> Dict[str, Any]:
     """
     
     try:
-        pattern = r'([A-Z0-9\s&]+)\s?-\s?(.+?)\s?-\s?Race\s?(\d+)'
+        pattern = r'^([A-Za-z0-9\s\&]+)-([A-Za-z0-9\s\,]+)-\s?Race\s?(\d+)'
         match = re.search(pattern, line)
         
         if not match:
@@ -42,8 +42,8 @@ def parse_track_race_date_race_number(line: str) -> Dict[str, Any]:
                 'object_type': 'track',
                 'name': match.group(1).strip().upper(),
             },
-            'race_date': datetime.strptime(match.group(2), '%B %d, %Y'),
-            'race_number': int(match.group(3))
+            'race_date': datetime.strptime(match.group(2).strip(), '%B %d, %Y'),
+            'race_number': int(match.group(3).strip())
         }
         
         logger.debug("Successfully parsed track/race info: %s", data)
@@ -200,6 +200,27 @@ def parse_cancelled(line: str) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error("Error parsing cancelled race: %s", e)
+        return {}
+    
+def parse_hurdles(line: str) -> Dict[str, Any]:
+    """
+    Parse hurdles race from a line of text.
+    
+    Args:
+        line: String containing hurdles race
+        
+    Returns:
+        Dictionary containing hurdles race
+    """
+    
+    try:
+        if 'TO BE RUN OVER NATIONAL FENCES' in line.upper():
+            return {'hurdles': True}
+        else:
+            return {}
+
+    except Exception as e:
+        logger.error("Error parsing hurdles race: %s", e)
         return {}
     
 def parse_track_condition(line: str) -> Dict[str, Any]:
@@ -364,7 +385,7 @@ def parse_fractional_times(line: str) -> List[Dict[str, Any]]:
     """
     
     try:
-        if 'Fractional Times:' not in line:
+        if 'Fractional Times:' not in line and 'Final Time:' not in line:
             return []
 
         pattern = r'\b\d+:\d+\.\d+|\b\d+\.\d+'
@@ -409,6 +430,7 @@ def parse_extracted_chart_data(extracted_chart_data: List[Dict[str, Any]]) -> Li
             {'parser': parse_fractional_times, 'output': 'children'},
             {'parser': parse_track_condition, 'output': 'attribute'},
             {'parser': parse_cancelled, 'output': 'attribute'},
+            {'parser': parse_hurdles, 'output': 'attribute'},
         ]
         
         table_parsers = {

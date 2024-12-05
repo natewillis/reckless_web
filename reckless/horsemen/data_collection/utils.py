@@ -361,7 +361,7 @@ def create_fractional_data_from_array_and_object(fractional_times, race_distance
             'distance': race_distance,
             'time': fractional_times[-1]
         })
-        logger.warning('in create_fractional_data_from_array_and_object, fractional_object is empty so only returning final')
+        logger.warning('in create_fractional_data_from_array_and_object, fractional_object is empty or only final time returned so only returning final')
         return fractional_data
     if len(fractional_times) == len(fractional_object['fractionals']):
         logger.info('in create_fractional_data_from_array_and_object, fractional times match!')

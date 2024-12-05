@@ -25,30 +25,33 @@ from django.utils import timezone
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def download_all_equibase_files():
+
+def download_equibase_files_for_tomorrow_and_yesterday():
     """
-    Download and process all required Equibase files for tomorrow's AQU races:
+    Download and process all required Equibase files for tomorrow's races:
     1. Find horses with null equibase_horse_id and get their past races' entries
     2. Get horse results for entries with equibase_horse_results_import=False
     3. Get charts for past races with equibase_chart_import=False
     """
-    tomorrow = timezone.now().date() + timedelta(days=1)
-    
-    # Get tomorrow's AQU races
-    tomorrow_races = Races.objects.filter(
-        track__code='AQU',
-        race_date=tomorrow
+    today = timezone.now().date()
+    yesterday = today - timedelta(days=1)
+    tomorrow = today + timedelta(days=1)
+
+    # Get races with a race date from yesterday to tomorrow
+    races = Races.objects.filter(
+        track__code__in=['AQU', 'SAR', 'CD'],
+        race_date__range=[yesterday, tomorrow]
     )
     
-    if not tomorrow_races.exists():
-        logger.info('No races found at AQU tomorrow')
+    if not races.exists():
+        logger.info('No races found tomorrow or yesterday')
         return
 
-    logger.info(f'Found {tomorrow_races.count()} races at AQU tomorrow')
+    logger.info(f'Found {races.count()} races tomorrow or yesterday')
 
     # Step 1: Get race cards that have horses with null equibase_horse_id
     cards_to_process = set()
-    for race in tomorrow_races:
+    for race in races:
         # Get entries with null equibase_horse_id
         null_id_entries = Entries.objects.filter(
             race=race,
@@ -72,7 +75,7 @@ def download_all_equibase_files():
     # Step 2: Get horse results for entries needing them
     horses_needing_results = set()
     logger.info('looking for horse results')
-    for race in tomorrow_races:
+    for race in races:
         entries = Entries.objects.filter(
             race=race,
             equibase_horse_results_import=False,
@@ -100,7 +103,7 @@ def download_all_equibase_files():
 
     # Step 3: Get charts for past races
     charts_to_process = set()
-    for race in tomorrow_races:
+    for race in races:
         # Get all horses in tomorrow's races
         horses = Horses.objects.filter(entries__race=race)
         
@@ -243,4 +246,4 @@ def collect_all_data_sequentially():
 
     # Step 2: Get all equibase entries HTMLs, then process them
     logger.info("Step 2: Collecting and processing Equibase files...")
-    download_all_equibase_files()
+    download_equibase_files_for_tomorrow_and_yesterday()

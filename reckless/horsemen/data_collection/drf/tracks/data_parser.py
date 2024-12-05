@@ -37,9 +37,6 @@ def parse_extracted_tracks_data(extracted_tracks_data):
             'country': track_data['country']
         }
 
-        if track['code'] != 'AQU':
-            continue
-
         # iterate through card and race to create track item
         for race_card in track_data.get('cards',[]):
             for race_number in race_card.get("raceList", []):

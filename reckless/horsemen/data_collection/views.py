@@ -57,7 +57,7 @@ def past_performance(request, race_id):
             ).select_related('track').order_by('-workout_date'),
             to_attr='recent_workouts'
         ),
-        # Get points of call for entry
+        # Get points of call for current race entry
         'pointsofcall_set'
     ).order_by('program_number')
 

@@ -30,6 +30,15 @@
                         | {{ race.get_race_surface_display }}
                         | Purse: ${{ race.purse|intcomma }}
                     </p>
+                    {% if fractional_times %}
+                    <div class="mb-2">
+                        <strong>Fractional Times:</strong>
+                        {% for ft in fractional_times %}
+                            {{ ft.text }}: {{ ft.time|floatformat:2 }}
+                            {% if not forloop.last %} | {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="col-md-4">
                     <div class="track-diagram text-end">
@@ -89,6 +98,15 @@
                     {% if entry.equibase_speed_rating %}
                     <p class="mb-1">
                         <strong>Speed Rating:</strong> {{ entry.equibase_speed_rating }}
+                    </p>
+                    {% endif %}
+                    {% if entry.pointsofcall_set.all %}
+                    <p class="mb-1">
+                        <strong>Current Race Points of Call:</strong>
+                        {% for call in entry.pointsofcall_set.all %}
+                            {{ call.text }}: {{ call.position }}<sup>{{ call.lengths_back|floatformat:1 }}</sup>
+                            {% if not forloop.last %} | {% endif %}
+                        {% endfor %}
                     </p>
                     {% endif %}
                 </div>

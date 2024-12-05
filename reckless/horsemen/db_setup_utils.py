@@ -43,6 +43,49 @@ def import_tracks_from_csv(file_path):
     except Exception as e:
         logger.error(f"Error during import: {str(e)}")
 
+def import_training_centers_from_csv(file_path):
+    """
+    Import training centers from CSV file into the Tracks model.
+    Only creates new entries if they don't exist, preserves existing data.
+    CSV format: Track Code,Track Name,Country Code,Time Zone
+    """
+    try:
+        # Skip header row
+        header_skipped = False
+        
+        # Use atomic transaction for batch processing
+        with transaction.atomic():
+            with open(file_path, newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                
+                for row in reader:
+                    # Skip header row
+                    if not header_skipped:
+                        header_skipped = True
+                        continue
+                        
+                    # Unpack CSV row into variables
+                    print(row)
+                    code, name, country, time_zone = row
+                    
+                    # Only create if the track doesn't exist
+                    if not Tracks.objects.filter(code=code).exists():
+                        # Prepare data for the training center
+                        track_data = {
+                            "name": name,
+                            "time_zone": time_zone,
+                            "country": country,
+                            "code": code
+                        }
+
+                        # Create new track
+                        track = Tracks.objects.create(**track_data)
+                        logger.info(f"Created training center: {track.name}")
+
+        logger.info("Training centers import complete.")
+    except Exception as e:
+        logger.error(f"Error during training centers import: {str(e)}")
+
 def get_timezone_from_offset(offset):
     # Pacific Time offset is UTC-8, adjust based on offset from Pacific
     utc_offset = timedelta(hours=8 - int(offset))
@@ -99,4 +142,3 @@ def import_tracks_from_trackmaster():
 
     else:
         logger.error(f"Failed to retrieve the webpage. Status code: {response.status_code}")
-

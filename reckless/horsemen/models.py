@@ -80,6 +80,7 @@ class Races(models.Model):
     record_horse_name = models.CharField(max_length=255, null=True)
     record_time = models.FloatField(null=True)
     record_date = models.DateField(null=True)
+    hurdles = models.BooleanField(default=False)
 
     def clean(self):
         # Choice Field Validation

@@ -7,7 +7,7 @@ import json
 logger = logging.getLogger(__name__)
 
 # precompile regex
-page_type_pattern = re.compile(r'([A-Z0-9\s&]+)\s?-\s?(.+?)\s?-\s?Race\s?(\d+)')
+page_type_pattern = re.compile(r'^([A-Za-z0-9\s\&]+)-([A-Za-z0-9\s\,]+)-\s?Race\s?(\d+)')
 
 # parsing lines into normal lines
 def get_text_with_spaces(line):
@@ -177,7 +177,7 @@ class EquibaseChartExtractor:
                 },
                 {
                     'header_pattern': r'Last\s*Raced\s*Pgm',
-                    'stop_pattern': r'(?:Fractional\s*Times|Run\s*-?\s*Up|Winner)',
+                    'stop_pattern': r'(?:Fractional\s*Times|Run\s*-?\s*Up|Winner|Final\s*Time)',
                     'table_name': 'entries'
                 },
                 {

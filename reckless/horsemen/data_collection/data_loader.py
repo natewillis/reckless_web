@@ -118,7 +118,7 @@ def parse_race(race_data: Dict[str, Any]) -> Races:
             'condition', 'off_time',
             'equibase_entries_import', 'equibase_chart_import',
             'race_type', 'race_name', 'grade',
-            'record_horse_name', 'record_time', 'record_date'
+            'record_horse_name', 'record_time', 'record_date', 'hurdles',
         ]
 
         # non-standard processing

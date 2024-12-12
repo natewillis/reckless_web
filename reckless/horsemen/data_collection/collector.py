@@ -17,13 +17,219 @@ from horsemen.data_collection.drf.tracks.data_parser import fetch_tracks_data
 from horsemen.data_collection.drf.entries.data_parser import get_entries_data
 from horsemen.data_collection.drf.results.data_parser import get_results_data
 from horsemen.data_collection.data_loader import process_parsed_objects
-from horsemen.models import Races, Entries, Horses
+from horsemen.models import Races, Entries, Horses, Tracks
 from horsemen.data_collection.scraping import scrape_url_zenrows
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.db.models import Q
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+def command_line_downloader():
+
+    # Get the current date and calculate the range
+    current_date = datetime.now().date()
+    start_date = current_date - timedelta(days=30)
+    end_date = current_date + timedelta(days=30)
+
+    # Step 1: Get the list of tracks with races in the specified date range
+    tracks = Tracks.objects.filter(
+        Q(races__race_date__gte=start_date, races__race_date__lte=end_date)
+    ).distinct()
+
+    # Step 2: Display tracks and prompt user to choose one
+    if not tracks.exists():
+        print("No tracks with races in the specified date range.")
+    else:
+        print("Available Tracks:")
+        for idx, track in enumerate(tracks, 1):
+            print(f"{idx}. {track.name}")
+        
+        while True:
+            try:
+                track_choice = int(input("Select a track by number: "))
+                if 1 <= track_choice <= len(tracks):
+                    selected_track = tracks[track_choice - 1]
+                    break
+                else:
+                    print("Invalid choice. Please choose a valid track number.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+        
+        # Step 3: List race dates for the selected track
+        races = Races.objects.filter(
+            track=selected_track, race_date__gte=start_date, race_date__lte=end_date
+        ).order_by('race_date')
+        
+        if not races.exists():
+            print("No races available for the selected track in the specified date range.")
+        else:
+            print(f"Available Race Dates for {selected_track.name}:")
+
+            race_date_info = {}
+
+            for idx, race in enumerate(races, 1):
+
+                # get stats on what needs to be downloaded
+                if race.race_date not in race_date_info:
+
+                    race_date_info[race.race_date] = {
+                        'total_entries': 0,
+                        'null_id_entries': 0,
+                        'results_needed': 0,
+                        'charts_needed': 0
+                    }
+                
+                # Get entries with null equibase_horse_id
+                null_id_entries = Entries.objects.filter(
+                    race=race,
+                    horse__equibase_horse_id__isnull=True
+                )
+                race_date_info[race.race_date]['total_entries'] += len(race.entries_set.all())
+                race_date_info[race.race_date]['null_id_entries'] += len(null_id_entries)
+
+                # Horse results history
+                results_entries = Entries.objects.filter(
+                    race=race,
+                    equibase_horse_results_import=False,
+                    equibase_horse_entries_import=False,
+                    horse__equibase_horse_id__isnull=False
+                ).select_related('horse')
+                race_date_info[race.race_date]['results_needed'] += len(results_entries)
+
+                # get charts
+                # Get all horses in tomorrow's races
+                race_horses = Horses.objects.filter(entries__race=race)
+                
+                # Find their past races needing charts (if this is a race in the past, you can grab the chart for it as well)
+                past_races = Races.objects.filter(
+                    entries__horse__in=race_horses,
+                    race_date__lt=timezone.now().date(),
+                    equibase_chart_import=False
+                ).distinct()
+                race_date_info[race.race_date]['charts_needed'] += len(past_races)
+
+            for idx, prompted_race_date in enumerate(race_date_info.keys(), 1):
+
+                print(f"{idx}. {prompted_race_date}: {race_date_info[prompted_race_date]['null_id_entries']}/{race_date_info[prompted_race_date]['total_entries']} null eqb ids, {race_date_info[prompted_race_date]['results_needed']} needing results, {race_date_info[prompted_race_date]['charts_needed']} past races needing charts")
+            
+            # Step 4: Prompt user to select a race date
+            while True:
+                try:
+                    race_choice = int(input("Select a race date by number: "))
+                    if 1 <= race_choice <= len(race_date_info.keys()):
+                        race_date = race_date_info.keys()[race_choice - 1]
+                        break
+                    else:
+                        print("Invalid choice. Please choose a valid race date number.")
+                except ValueError:
+                    print("Invalid input. Please enter a number.")
+            
+            # Step 5: Display the result
+            print(f"You selected track: {selected_track.name}")
+            print(f"You selected race date: {race_date}")
+
+            # process
+            donwload_and_process_single_race_day(race_date, selected_track)
+
+
+def donwload_and_process_single_race_day(race_date, track):
+
+    # get races
+    races = Races.objects.filter(
+        track=track,
+        race_date=race_date
+    )
+
+    if not races.exists():
+        logger.info('No races found tomorrow or yesterday')
+        return
+    
+    logger.info(f'Found {races.count()} races for {track.name}')
+
+    # Step 1: Get race cards that have horses with null equibase_horse_id
+    cards_to_process = set()
+    for race in races:
+        # Get entries with null equibase_horse_id
+        null_id_entries = Entries.objects.filter(
+            race=race,
+            horse__equibase_horse_id__isnull=True
+        )
+        logger.debug(f'{len(null_id_entries)} null id entries in race {race.race_number} at {race.track.name}')
+        if len(null_id_entries) > 0:
+            filename = f'EQB_ENTRIES_{race.track.code}_{race.race_date.strftime("%Y%m%d")}.html'
+            url = race.track.get_equibase_entries_url_for_date(race.race_date)
+            cards_to_process.add((url,filename))
+
+    # Download and process equibase entries in order to get equibase horse ids
+    for url, filename in cards_to_process:
+        logger.info(f'Processing entries: {filename}')
+        scrape_url_zenrows(url, filename)
+    
+    if cards_to_process:
+        parse_equibase_files_by_type('ENTRIES')
+
+    # Step 2: Get horse results (results in past for horses in these races) for entries needing them
+    horses_needing_results = set()
+    logger.info('looking for horse results')
+    for race in races:
+        entries = Entries.objects.filter(
+            race=race,
+            equibase_horse_results_import=False,
+            equibase_horse_entries_import=False,
+            horse__equibase_horse_id__isnull=False
+        ).select_related('horse')
+        
+        for entry in entries:
+            logger.debug(f'for results parsing, {entry.horse.horse_name} for race {entry.race.race_number} at {entry.race.track.name} has a results flag of {entry.equibase_horse_results_import} ')
+            horses_needing_results.add((entry.horse, entry.race.race_date))
+
+    # Download and process horse results
+    for horse, race_date in horses_needing_results:
+        url = horse.get_equibase_horse_results_url()
+        if url:
+            filename = (
+                f'EQB_HORSERESULTS_{horse.equibase_horse_id}_'
+                f'{race_date.strftime("%Y%m%d")}.html'
+            )
+            logger.info(f'Processing horse results: {filename}')
+            scrape_url_zenrows(url, filename)
+
+    if horses_needing_results:
+        parse_equibase_files_by_type('HORSERESULTS')
+
+    # Step 3: Get charts for past races
+    charts_to_process = set()
+    for race in races:
+        # Get all horses in tomorrow's races
+        horses = Horses.objects.filter(entries__race=race)
+        
+        # Find their past races needing charts (if this is a race in the past, you can grab the chart for it as well)
+        past_races = Races.objects.filter(
+            entries__horse__in=horses,
+            race_date__lt=timezone.now().date(),
+            equibase_chart_import=False
+        ).distinct()
+
+        logger.info(f'found {len(past_races)} past races necessary to fill in past performance for {len(horses)} for race {race.race_number} at {race.track.name} on {race.race_date}')
+        
+        for past_race in past_races:
+            url = past_race.track.get_equibase_chart_url_for_date(past_race.race_date)
+            filename = f'EQB_CHART_{past_race.track.code}_{past_race.race_date.strftime("%Y%m%d")}.pdf'
+            charts_to_process.add((url, filename))
+
+    # Download and process charts
+    for url, filename in charts_to_process:
+        logger.info(f'Processing chart: {filename}')
+        scrape_url_zenrows(url, filename)
+
+    if charts_to_process:
+        parse_equibase_files_by_type('CHART')
+
+    logger.info('Completed downloading and processing all required Equibase files')
+
+    
 
 
 def download_equibase_files_for_tomorrow_and_yesterday():

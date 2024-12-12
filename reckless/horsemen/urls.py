@@ -18,6 +18,7 @@ from .analysis.views import (
     entries_missing_charts,
     horses_without_workouts
 )
+from .simulation.views import race_analysis
 
 app_name = 'horsemen'
 
@@ -42,6 +43,9 @@ urlpatterns = [
     path('analysis/data-quality/entries-without-points/', entries_without_points, name='entries_without_points'),
     path('analysis/data-quality/entries-missing-charts/', entries_missing_charts, name='entries_missing_charts'),
     path('analysis/data-quality/horses-without-workouts/', horses_without_workouts, name='horses_without_workouts'),
+    
+    # Simulation views
+    path('race/<int:race_id>/analysis/', race_analysis, name='race_analysis'),
     
     # API endpoints
     path('api/velocity-data/', velocity_data, name='velocity_data'),

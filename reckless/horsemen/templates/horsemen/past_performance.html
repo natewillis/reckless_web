@@ -14,6 +14,9 @@
                         {{ race.track.name }} R{{ race.race_number }} | {{ race.race_date|date:"D M d" }} | Post Time: {{ race.post_time|date:"g:i A" }} ET
                     </h2>
                 </div>
+                <div class="col-auto">
+                    <a href="{% url 'horsemen:race_analysis' race.id %}" class="btn btn-light btn-sm">View Race Analysis</a>
+                </div>
             </div>
         </div>
         <div class="card-body">
@@ -147,9 +150,14 @@
                             <td>{{ past_entry.equibase_speed_rating|default:"-" }}</td>
                             <td>{{ past_entry.comment|default:"-" }}</td>
                             <td>
-                                <a href="{% url 'horsemen:past_performance' past_entry.race.id %}" class="btn btn-sm btn-outline-secondary">
-                                    Past Perf.
-                                </a>
+                                <div class="btn-group">
+                                    <a href="{% url 'horsemen:past_performance' past_entry.race.id %}" class="btn btn-sm btn-outline-secondary">
+                                        Past Perf.
+                                    </a>
+                                    <a href="{% url 'horsemen:race_analysis' past_entry.race.id %}" class="btn btn-sm btn-outline-primary">
+                                        Analysis
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}

@@ -1,0 +1,224 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block title %}Race Analysis - {{ race.track.name }} Race {{ race.race_number }}{% endblock %}
+
+{% block content %}
+<style>
+.chart-container {
+    height: 300px;
+    position: relative;
+}
+</style>
+
+<div class="container-fluid">
+    <div class="mb-4">
+        <h1>{{ race.track.name }} - Race {{ race.race_number }} Analysis</h1>
+        <h4 class="text-muted">{{ race.race_date|date:"F d, Y" }} at {{ race.post_time|date:"g:i A" }}</h4>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2 class="h4 mb-0">Race Information</h2>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Surface:</strong> {{ race.get_race_surface_display }}</p>
+                    <p><strong>Distance:</strong> {{ race.distance }} Furlongs</p>
+                    <p><strong>Race Type:</strong> {{ race.get_race_type_display|default:"N/A" }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Purse:</strong> ${{ race.purse|default:"0"|intcomma }}</p>
+                    <p><strong>Age Restriction:</strong> {{ race.get_age_restriction_display|default:"N/A" }}</p>
+                    <p><strong>Sex Restriction:</strong> {{ race.get_sex_restriction_display|default:"N/A" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% for horse in horse_data %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3 class="h5 mb-0">{{ horse.horse_name }} (PP: {{ horse.post_position }}, #{{ horse.program_number }})</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <h4 class="h6">Average Speed Over Time - All Races</h4>
+                    <div class="chart-container">
+                        <canvas id="velocityChart{{ forloop.counter }}"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h4 class="h6">Average Speed Over Time - Same Distance ({{ race.distance }} Furlongs)</h4>
+                    <div class="chart-container">
+                        <canvas id="distanceVelocityChart{{ forloop.counter }}"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h4 class="h6">Finish Position Distribution</h4>
+                    <div class="chart-container">
+                        <canvas id="positionsChart{{ forloop.counter }}"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+<script>
+    {% for horse in horse_data %}
+    // All Races Velocity Scatter Plot
+    new Chart(document.getElementById('velocityChart{{ forloop.counter }}'), {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Average Speed (furlongs/second)',
+                data: [
+                    {% for data in horse.velocity_data %}
+                    {
+                        x: '{{ data.date }}',
+                        y: {{ data.velocity|floatformat:2 }}
+                    },
+                    {% endfor %}
+                ],
+                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                pointRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day',
+                        displayFormats: {
+                            day: 'MMM d, yyyy'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Race Date'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Average Speed (furlongs/second)'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Speed: ${context.parsed.y.toFixed(2)} f/s`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Same Distance Velocity Scatter Plot
+    new Chart(document.getElementById('distanceVelocityChart{{ forloop.counter }}'), {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Average Speed (furlongs/second)',
+                data: [
+                    {% for data in horse.same_distance_velocity_data %}
+                    {
+                        x: '{{ data.date }}',
+                        y: {{ data.velocity|floatformat:2 }}
+                    },
+                    {% endfor %}
+                ],
+                backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                pointRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day',
+                        displayFormats: {
+                            day: 'MMM d, yyyy'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Race Date'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Average Speed (furlongs/second)'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Speed: ${context.parsed.y.toFixed(2)} f/s`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Finish Positions Distribution Chart
+    new Chart(document.getElementById('positionsChart{{ forloop.counter }}'), {
+        type: 'bar',
+        data: {
+            labels: {{ horse.finish_positions }},
+            datasets: [{
+                label: 'Number of Finishes',
+                data: {{ horse.finish_position_counts }},
+                backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Finish Position'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Times'
+                    }
+                }
+            }
+        }
+    });
+    {% endfor %}
+</script>
+{% endblock %}

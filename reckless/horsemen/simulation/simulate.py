@@ -13,12 +13,20 @@ class Simulation:
         
         # store race
         self.race = race
+        self.simulation_count = MONTE_CARLO_RACE_COUNT
 
         # create a simulation entry
         self.simulation_entries = {}
         for entry in race.entries_set.all():
-            if not entry.scratched and entry.program_number:
+            if not entry.scratch_indicator != 'N' and entry.program_number:
                 self.simulation_entries[entry.program_number] = SimulationEntry(entry)
+
+        # results entries
+        self.results = {
+            'exactas': {},
+            'trifectas': {},
+            'superfectas': {}
+        }
 
         # setup sim data
         race_distance = self.race.distance * METERS_PER_FURLONG
@@ -38,7 +46,10 @@ class Simulation:
 
                     # get a velocity from the de
                     kde = simulation_entry.kde[point]
-                    random_velocity = kde.resample(size=1)[0]
+                    if kde:
+                        random_velocity = kde.resample(size=1)[0]
+                    else:
+                        random_velocity = 0.00000001
 
                     # calculate time
                     finish_times[program_number] += simulation_step_distance / random_velocity
@@ -47,11 +58,27 @@ class Simulation:
             sorted_finish_times = sorted(finish_times.items(), key=lambda item: item[1])
 
             # Iterate through the first four horses and update their finish places
-            for finish_index, (program_number, finish_time) in enumerate(sorted_finish_times[:3], start=0):
+            for finish_index, (program_number, finish_time) in enumerate(sorted_finish_times[:4], start=0):
                 # Increment the corresponding simulation finish counter
                 self.simulation_entries[program_number].simulation_finishes[finish_index+1] += 1
 
+            # exactas
+            exacta_key = '-'.join([program_number for program_number, finish_times in sorted_finish_times[:2]])
+            if exacta_key not in self.results['exactas']:
+                self.results['exactas'][exacta_key] = 0
+            self.results['exactas'][exacta_key] += 1
 
+            # trifectas
+            trifecta_key = '-'.join([program_number for program_number, finish_times in sorted_finish_times[:3]])
+            if trifecta_key not in self.results['trifectas']:
+                self.results['trifectas'][trifecta_key] = 0
+            self.results['trifectas'][trifecta_key] += 1
+
+            #superfectas
+            superfecta_key = '-'.join([program_number for program_number, finish_times in sorted_finish_times[:4]])
+            if superfecta_key not in self.results['superfectas']:
+                self.results['superfectas'][superfecta_key] = 0
+            self.results['superfectas'][superfecta_key] += 1
 
 
 class SimulationEntry:

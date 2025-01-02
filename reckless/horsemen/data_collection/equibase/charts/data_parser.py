@@ -235,7 +235,7 @@ def parse_track_condition(line: str) -> Dict[str, Any]:
     """
     
     try:
-        if 'Track: ' not in line:
+        if 'Track:' not in line:
             return {}
 
         pattern = r'Track: (\w+)'
@@ -244,8 +244,8 @@ def parse_track_condition(line: str) -> Dict[str, Any]:
             condition = match.group(1).strip().upper()
             logger.debug("Successfully parsed track condition: %s", condition)
             return {'condition': condition}
-
-        return {}
+        else:
+            return {'condition': "UNKNOWN"}
 
     except Exception as e:
         logger.error("Error parsing condition: %s", e)

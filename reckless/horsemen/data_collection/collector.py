@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 def command_line_downloader():
 
+    # Run drf first
+    drf_run()
+
     # Get the current date and calculate the range
     current_date = datetime.now().date()
     start_date = current_date - timedelta(days=30)
@@ -39,12 +42,14 @@ def command_line_downloader():
     ).distinct()
 
     # Step 2: Display tracks and prompt user to choose one
+    do_them_all = False
     if not tracks.exists():
         print("No tracks with races in the specified date range.")
     else:
         print("Available Tracks:")
         for idx, track in enumerate(tracks, 1):
             print(f"{idx}. {track.name}")
+        print(f'{len(tracks)+1}. All')
         
         while True:
             try:
@@ -52,86 +57,117 @@ def command_line_downloader():
                 if 1 <= track_choice <= len(tracks):
                     selected_track = tracks[track_choice - 1]
                     break
+                elif track_choice == len(tracks)+1:
+                    do_them_all = True
+                    break
                 else:
                     print("Invalid choice. Please choose a valid track number.")
             except ValueError:
                 print("Invalid input. Please enter a number.")
         
         # Step 3: List race dates for the selected track
-        races = Races.objects.filter(
-            track=selected_track, race_date__gte=start_date, race_date__lte=end_date
-        ).order_by('race_date')
+        if do_them_all:
+            races = Races.objects.filter(
+                race_date__gte=start_date, race_date__lte=end_date
+            ).order_by('race_date')
+        else:
+            races = Races.objects.filter(
+                track=selected_track, race_date__gte=start_date, race_date__lte=end_date
+            ).order_by('race_date')
         
         if not races.exists():
             print("No races available for the selected track in the specified date range.")
         else:
-            print(f"Available Race Dates for {selected_track.name}:")
+            if do_them_all:
+                race_date_track_set = set()
 
-            race_date_info = {}
+                for race in races:
+                    race_date_track_set.add((race.race_date, race.track))
 
-            for idx, race in enumerate(races, 1):
+                for race_date, track in race_date_track_set:
+                    print(f'processing {track.name} on {race_date}')
+                    donwload_and_process_single_race_day(race_date, track)
 
-                # get stats on what needs to be downloaded
-                if race.race_date not in race_date_info:
+            else:
+                print(f"Available Race Dates for {selected_track.name}:")
 
-                    race_date_info[race.race_date] = {
-                        'total_entries': 0,
-                        'null_id_entries': 0,
-                        'results_needed': 0,
-                        'charts_needed': 0
-                    }
+                race_date_info = {}
+
+                for idx, race in enumerate(races, 1):
+
+                    # get stats on what needs to be downloaded
+                    if race.race_date not in race_date_info:
+
+                        race_date_info[race.race_date] = {
+                            'total_entries': 0,
+                            'null_id_entries': 0,
+                            'results_needed': 0,
+                            'charts_needed': 0
+                        }
+                    
+                    # Get entries with null equibase_horse_id
+                    null_id_entries = Entries.objects.filter(
+                        race=race,
+                        horse__equibase_horse_id__isnull=True
+                    )
+                    race_date_info[race.race_date]['total_entries'] += len(race.entries_set.all())
+                    race_date_info[race.race_date]['null_id_entries'] += len(null_id_entries)
+
+                    # Horse results history
+                    results_entries = Entries.objects.filter(
+                        race=race,
+                        equibase_horse_results_import=False,
+                        equibase_horse_entries_import=False,
+                        horse__equibase_horse_id__isnull=False
+                    ).select_related('horse')
+                    race_date_info[race.race_date]['results_needed'] += len(results_entries)
+
+                    # get charts
+                    # Get all horses in tomorrow's races
+                    race_horses = Horses.objects.filter(entries__race=race)
+                    
+                    # Find their past races needing charts (if this is a race in the past, you can grab the chart for it as well)
+                    past_races = Races.objects.filter(
+                        entries__horse__in=race_horses,
+                        race_date__lt=timezone.now().date(),
+                        equibase_chart_import=False
+                    ).distinct()
+                    race_date_info[race.race_date]['charts_needed'] += len(past_races)
+
+                for idx, prompted_race_date in enumerate(race_date_info.keys(), 1):
+
+                    print(f"{idx}. {prompted_race_date}: {race_date_info[prompted_race_date]['null_id_entries']}/{race_date_info[prompted_race_date]['total_entries']} null eqb ids, {race_date_info[prompted_race_date]['results_needed']} needing results, {race_date_info[prompted_race_date]['charts_needed']} past races needing charts")
                 
-                # Get entries with null equibase_horse_id
-                null_id_entries = Entries.objects.filter(
-                    race=race,
-                    horse__equibase_horse_id__isnull=True
-                )
-                race_date_info[race.race_date]['total_entries'] += len(race.entries_set.all())
-                race_date_info[race.race_date]['null_id_entries'] += len(null_id_entries)
+                print(f'{len(race_date_info.keys())+1}. ALL ')
 
-                # Horse results history
-                results_entries = Entries.objects.filter(
-                    race=race,
-                    equibase_horse_results_import=False,
-                    equibase_horse_entries_import=False,
-                    horse__equibase_horse_id__isnull=False
-                ).select_related('horse')
-                race_date_info[race.race_date]['results_needed'] += len(results_entries)
-
-                # get charts
-                # Get all horses in tomorrow's races
-                race_horses = Horses.objects.filter(entries__race=race)
+                # Step 4: Prompt user to select a race date
+                race_dates = None
+                while True:
+                    try:
+                        race_choice = int(input("Select a race date by number: "))
+                        if race_choice == (len(race_date_info.keys())+1):
+                            race_dates = race_date_info.keys()
+                            break
+                        elif 1 <= race_choice <= len(race_date_info.keys()):
+                            race_date = race_date_info.keys()[race_choice - 1]
+                            break
+                        else:
+                            print("Invalid choice. Please choose a valid race date number.")
+                    except ValueError:
+                        print("Invalid input. Please enter a number.")
                 
-                # Find their past races needing charts (if this is a race in the past, you can grab the chart for it as well)
-                past_races = Races.objects.filter(
-                    entries__horse__in=race_horses,
-                    race_date__lt=timezone.now().date(),
-                    equibase_chart_import=False
-                ).distinct()
-                race_date_info[race.race_date]['charts_needed'] += len(past_races)
+                # Step 5: Display the result
+                print(f"You selected track: {selected_track.name}")
+                if race_dates:
+                    print('You selected them all!')
+                    for race_date in race_dates:
+                        donwload_and_process_single_race_day(race_date, selected_track)
+                else:
+                    print(f"You selected race date: {race_date}")
+                    # process
+                    donwload_and_process_single_race_day(race_date, selected_track)
 
-            for idx, prompted_race_date in enumerate(race_date_info.keys(), 1):
-
-                print(f"{idx}. {prompted_race_date}: {race_date_info[prompted_race_date]['null_id_entries']}/{race_date_info[prompted_race_date]['total_entries']} null eqb ids, {race_date_info[prompted_race_date]['results_needed']} needing results, {race_date_info[prompted_race_date]['charts_needed']} past races needing charts")
             
-            # Step 4: Prompt user to select a race date
-            while True:
-                try:
-                    race_choice = int(input("Select a race date by number: "))
-                    if 1 <= race_choice <= len(race_date_info.keys()):
-                        race_date = race_date_info.keys()[race_choice - 1]
-                        break
-                    else:
-                        print("Invalid choice. Please choose a valid race date number.")
-                except ValueError:
-                    print("Invalid input. Please enter a number.")
-            
-            # Step 5: Display the result
-            print(f"You selected track: {selected_track.name}")
-            print(f"You selected race date: {race_date}")
-
-            # process
-            donwload_and_process_single_race_day(race_date, selected_track)
 
 
 def donwload_and_process_single_race_day(race_date, track):
@@ -156,8 +192,11 @@ def donwload_and_process_single_race_day(race_date, track):
             race=race,
             horse__equibase_horse_id__isnull=True
         )
-        logger.debug(f'{len(null_id_entries)} null id entries in race {race.race_number} at {race.track.name}')
-        if len(null_id_entries) > 0:
+        all_entries = Entries.objects.filter(
+            race=race,
+        )
+        logger.debug(f'{len(null_id_entries)} null id entries in race out of {len(all_entries)} {race.race_number} at {race.track.name}')
+        if len(null_id_entries) > 0 or len(all_entries) == 0:
             filename = f'EQB_ENTRIES_{race.track.code}_{race.race_date.strftime("%Y%m%d")}.html'
             url = race.track.get_equibase_entries_url_for_date(race.race_date)
             cards_to_process.add((url,filename))
@@ -369,44 +408,50 @@ def parse_equibase_files():
             except PermissionError as p:
                 logger.error('Could not delete %s due to permission error %s', file_path.name, p)
 
-def parse_equibase_files_by_type(file_type):
+def parse_equibase_files_by_type(file_type, debug_flag = False):
     """Parse specific type of Equibase files from the scraping folder."""
     processed_folder = SCRAPING_FOLDER / 'processed'
     processed_folder.mkdir(exist_ok=True)
 
     for file_path in SCRAPING_FOLDER.iterdir():
-        if not file_path.is_file() or 'EQB' not in file_path.name:
-            continue
 
-        if file_type in file_path.name:
-            logger.info('Processing %s from %s', file_path.name, file_path)
-            processed = False
-            
-            if file_type == 'ENTRIES':
-                extracted_data = parse_equibase_entries(file_path)
-                objects_to_load = parse_extracted_entries_data(extracted_data)
-                processed = True
-            elif file_type == 'HORSERESULTS':
-                extracted_data = parse_equibase_horse_results(file_path)
-                objects_to_load = parse_extracted_horse_results_data(extracted_data)
-                processed = True
-            elif file_type == 'CHART' and '.pdf' in file_path.name:
-                extracted_data = parse_equibase_chart(file_path)
-                objects_to_load = parse_extracted_chart_data(extracted_data)
-                processed = True
-            else:
+        try:
+
+            if not file_path.is_file() or 'EQB' not in file_path.name:
                 continue
 
-            process_parsed_objects(objects_to_load)
+            if file_type in file_path.name:
+                logger.info('Processing %s from %s', file_path.name, file_path)
+                processed = False
+                
+                if file_type == 'ENTRIES':
+                    extracted_data = parse_equibase_entries(file_path)
+                    objects_to_load = parse_extracted_entries_data(extracted_data)
+                    processed = True
+                elif file_type == 'HORSERESULTS':
+                    extracted_data = parse_equibase_horse_results(file_path)
+                    objects_to_load = parse_extracted_horse_results_data(extracted_data)
+                    processed = True
+                elif file_type == 'CHART' and '.pdf' in file_path.name:
+                    extracted_data = parse_equibase_chart(file_path, debug=debug_flag)
+                    objects_to_load = parse_extracted_chart_data(extracted_data)
+                    processed = True
+                else:
+                    continue
 
-            # Move processed files to processed folder
-            if processed:
-                try:
-                    file_path.rename(processed_folder / file_path.name)
-                except PermissionError as p:
-                    logger.error('Could not delete %s due to permission error %s', file_path.name, p)
-                except WindowsError as p:
-                    logger.error('Could not delete %s due to windows error %s', file_path.name, p)
+                process_parsed_objects(objects_to_load)
+
+                # Move processed files to processed folder
+                if processed:
+                    try:
+                        file_path.rename(processed_folder / file_path.name)
+                    except PermissionError as p:
+                        logger.error('Could not delete %s due to permission error %s', file_path.name, p)
+                    except WindowsError as p:
+                        logger.error('Could not delete %s due to windows error %s', file_path.name, p)
+        except Exception as e:
+            logger.error(f'eror parsing {file_path.name}: {e}')
+
 
 def drf_run():
     """Run DRF data collection process."""

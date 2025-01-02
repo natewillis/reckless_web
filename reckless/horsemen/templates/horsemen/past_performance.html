@@ -16,6 +16,7 @@
                 </div>
                 <div class="col-auto">
                     <a href="{% url 'horsemen:race_analysis' race.id %}" class="btn btn-light btn-sm">View Race Analysis</a>
+                    <a href="{% url 'horsemen:race_simulation' race.id %}" class="btn btn-light btn-sm">View Race Simulation</a>
                 </div>
             </div>
         </div>
@@ -156,6 +157,9 @@
                                     </a>
                                     <a href="{% url 'horsemen:race_analysis' past_entry.race.id %}" class="btn btn-sm btn-outline-primary">
                                         Analysis
+                                    </a>
+                                    <a href="{% url 'horsemen:race_simulation' past_entry.race.id %}" class="btn btn-sm btn-outline-success">
+                                        Simulation
                                     </a>
                                 </div>
                             </td>

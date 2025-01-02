@@ -17,7 +17,7 @@ from horsemen.models import (
     Jockeys, PointsOfCall, Payoffs, Entries, Workouts
 )
 from horsemen.constants import FURLONGS_PER_FEET
-from fuzzywuzzy import process
+from fuzzywuzzy import process, fuzz
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -63,7 +63,16 @@ def parse_track(track_data: Dict[str, Any]) -> Tracks:
         if track:
             return track
         else:
-            raise ValueError(f'No matching track found for data: {track_data}')
+            if 'code' in track_data:
+                # create track
+                track = Tracks.objects.create(
+                    code = track_data['code'],
+                    name = track_data['code'],
+                    country = 'USA'
+                )
+                return track
+            else:
+                raise ValueError(f'No matching track found for data: {track_data}')
 
     except Exception as e:
         logger.error("Error parsing track: %s", e)
@@ -428,14 +437,17 @@ def parse_entry(entry_data: Dict[str, Any], parent_object: Optional[Races] = Non
             if entry and 'horse' in entry_data:
                 if 'horse_name' in entry_data['horse']:
                     if entry.horse.horse_name != entry_data['horse']['horse_name']:
-                        logger.warning(
-                            "Horse changed for program number %s from %s to %s",
-                            entry.program_number,
-                            entry.horse.horse_name,
-                            entry_data['horse']['horse_name']
-                        )
-                        entry.delete()
-                        entry = None
+                        if fuzz.partial_ratio(entry.horse.horse_name,entry_data['horse']['horse_name']) < 90:
+                            logger.warning(
+                                "Horse changed for program number %s from %s to %s",
+                                entry.program_number,
+                                entry.horse.horse_name,
+                                entry_data['horse']['horse_name']
+                            )
+                            entry.delete()
+                            entry = None
+                        else:
+                            logger.error(f"There was an issue parsing {entry_data['horse']['horse_name']} as entry.horse.horse_name")
 
         # Create new entry if needed
         if not entry and 'horse' in entry_data:
@@ -650,11 +662,14 @@ def parse_point_of_call(point_of_call_data: Dict[str, Any], parent_object: Optio
         entry = parent_object or parse_entry(point_of_call_data['entry'])
         if not entry:
             raise ValueError(f"Parent entry is required: {point_of_call_data}")
+        
+        # Figure out QH or Mixed
+
 
         # Get point of call object based on distance if available
         point_of_call_object = get_point_of_call_object_from_furlongs(
             entry.race.distance,
-            quarter_horse_flag=entry.race.breed == 'QH'
+            quarter_horse_flag=((entry.race.breed == 'QH') or (entry.race.breed == 'MX'))
         )
 
         # Validate required fields

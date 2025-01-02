@@ -19,7 +19,7 @@ def get_results_data():
 
     # Get current date
     today = datetime.now(pytz.UTC).date()
-    fourteen_days_ago = today - timedelta(days=1)
+    fourteen_days_ago = today - timedelta(days=14)
 
     # Query races that match our criteria
     races = Races.objects.filter(

@@ -19,11 +19,11 @@ def get_entries_data():
 
     # Get current date
     today = datetime.now(pytz.UTC).date()
-    three_days_future = today + timedelta(days=1)
+    days_future = today + timedelta(days=7)
 
     # Query races that match our criteria
     races = Races.objects.filter(
-        Q(race_date__gte=today, race_date__lte=three_days_future, drf_entries_import=False) |  # Next 3 days without import
+        Q(race_date__gte=today, race_date__lte=days_future, drf_entries_import=False) |  # Next 3 days without import
         Q(race_date=today)  # Today's races regardless of import status
     ).select_related('track')
 

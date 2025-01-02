@@ -26,6 +26,9 @@ class Tracks(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.name} ({self.code})'
     
     def get_drf_results_url_for_date(self, race_date):
         return f'https://www.drf.com/results/resultDetails/id/{self.code}/country/{self.country}/date/{race_date.strftime('%m-%d-%Y')}'

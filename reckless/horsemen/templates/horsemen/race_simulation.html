@@ -1,0 +1,260 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block title %}Race Simulation - {{ race.track.name }} Race {{ race.race_number }}{% endblock %}
+
+{% block content %}
+<style>
+.chart-container {
+    height: 250px;
+    position: relative;
+    margin-bottom: 20px;
+}
+.exotic-table {
+    font-size: 0.9rem;
+}
+.exotic-table th, .exotic-table td {
+    padding: 0.5rem;
+}
+</style>
+
+<div class="container-fluid">
+    <div class="mb-4">
+        <h1>{{ race.track.name }} - Race {{ race.race_number }} Simulation</h1>
+        <h4 class="text-muted">{{ race.race_date|date:"F d, Y" }} at {{ race.post_time|date:"g:i A" }}</h4>
+        <p>Based on {{ simulation_count }} simulated races</p>
+    </div>
+
+    <div class="row">
+        {% if race_results %}
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h4 mb-0">Actual Race Results</h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Program #</th>
+                                    <th>Horse</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in race_results %}
+                                <tr>
+                                    <td>{{ result.position }}</td>
+                                    <td>{{ result.entry.program_number }}</td>
+                                    <td>{{ result.entry.horse.horse_name }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h4 mb-0">Win/Place/Show Probabilities</h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Program #</th>
+                                    <th>Horse</th>
+                                    <th>Win %</th>
+                                    <th>Place %</th>
+                                    <th>Show %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for horse in horse_data %}
+                                <tr>
+                                    <td>{{ horse.program_number }}</td>
+                                    <td>{{ horse.horse_name }}</td>
+                                    <td>{{ horse.finish_percentages.1|floatformat:1 }}%</td>
+                                    <td>{{ horse.finish_percentages.2|floatformat:1 }}%</td>
+                                    <td>{{ horse.finish_percentages.3|floatformat:1 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h4 mb-0">Exotic Wager Probabilities</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h3 class="h5 mb-3">Top Exactas</h3>
+                            <div class="table-responsive">
+                                <table class="table table-sm exotic-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Combination</th>
+                                            <th>Probability</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for result in exotic_results.exactas %}
+                                        <tr>
+                                            <td>{{ result.combination }}</td>
+                                            <td>{{ result.percentage|floatformat:1 }}%</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h3 class="h5 mb-3">Top Trifectas</h3>
+                            <div class="table-responsive">
+                                <table class="table table-sm exotic-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Combination</th>
+                                            <th>Probability</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for result in exotic_results.trifectas %}
+                                        <tr>
+                                            <td>{{ result.combination }}</td>
+                                            <td>{{ result.percentage|floatformat:1 }}%</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h3 class="h5 mb-3">Top Superfectas</h3>
+                            <div class="table-responsive">
+                                <table class="table table-sm exotic-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Combination</th>
+                                            <th>Probability</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for result in exotic_results.superfectas %}
+                                        <tr>
+                                            <td>{{ result.combination }}</td>
+                                            <td>{{ result.percentage|floatformat:1 }}%</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% for horse in horse_data %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3 class="h5 mb-0">{{ horse.horse_name }} (#{{ horse.program_number }})</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for point in horse.kde_data %}
+                <div class="col">
+                    <h4 class="h6">Point {{ point.point }} Velocity Distribution</h4>
+                    <div class="chart-container">
+                        <canvas id="kdeChart{{ horse.program_number }}_{{ point.point }}"></canvas>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    {% for horse in horse_data %}
+        {% for point in horse.kde_data %}
+        new Chart(document.getElementById('kdeChart{{ horse.program_number }}_{{ point.point }}'), {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'KDE',
+                    data: {{ point.x_values|safe }}.map((x, i) => ({
+                        x: x,
+                        y: {{ point.y_values|safe }}[i]
+                    })),
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    showLine: true,
+                    fill: true
+                }, {
+                    label: 'Historical Velocities',
+                    data: {{ point.velocities|safe }}.map(v => ({
+                        x: v,
+                        y: 0
+                    })),
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    pointRadius: 6,
+                    showLine: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Velocity (m/s)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Density'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const dataset = context.dataset;
+                                if (dataset.label === 'Historical Velocities') {
+                                    return `Velocity: ${context.parsed.x.toFixed(2)} m/s`;
+                                }
+                                return `Density: ${context.parsed.y.toFixed(4)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        {% endfor %}
+    {% endfor %}
+</script>
+{% endblock %}

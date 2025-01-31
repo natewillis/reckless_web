@@ -31,13 +31,13 @@ class Tracks(models.Model):
         return f'{self.name} ({self.code})'
     
     def get_drf_results_url_for_date(self, race_date):
-        return f'https://www.drf.com/results/resultDetails/id/{self.code}/country/{self.country}/date/{race_date.strftime('%m-%d-%Y')}'
+        return f"https://www.drf.com/results/resultDetails/id/{self.code}/country/{self.country}/date/{race_date.strftime('%m-%d-%Y')}"
     
     def get_drf_entries_url_for_date(self, race_date):
         return f"https://www.drf.com/entries/entryDetails/id/{self.code}/country/{self.country}/date/{race_date.strftime('%m-%d-%Y')}"
     
     def get_equibase_chart_url_for_date(self, race_date):
-        return f'https://www.equibase.com/premium/eqbPDFChartPlus.cfm?RACE=A&BorP=P&TID={self.code}&CTRY={self.country}&DT={race_date.strftime('%m/%d/%Y')}&DAY=D&STYLE=EQB'
+        return f"https://www.equibase.com/premium/eqbPDFChartPlus.cfm?RACE=A&BorP=P&TID={self.code}&CTRY={self.country}&DT={race_date.strftime('%m/%d/%Y')}&DAY=D&STYLE=EQB"
 
     def get_equibase_entries_url_for_date(self, race_date):
         return f'https://www.equibase.com/static/entry/{self.code}{race_date.strftime("%m%d%y")}{self.country}-EQB.html'

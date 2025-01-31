@@ -43,7 +43,13 @@
         <div class="mb-3">
             <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
             
-            {% if field.name == 'content' %}
+            {% if field.name == 'status' %}
+            <select name="{{ field.name }}" id="{{ field.id_for_label }}" class="form-select {% if field.errors %}is-invalid{% endif %}" {% if field.field.required %}required{% endif %}>
+                {% for value, label in field.field.choices %}
+                <option value="{{ value }}" {% if value == field.value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% elif field.name == 'content' %}
             {{ field }}
             {% elif field.name == 'featured_image' %}
             {% if form.instance.featured_image %}
